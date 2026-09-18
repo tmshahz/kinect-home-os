@@ -80,7 +80,7 @@ namespace KinectV2MouseControl
             {
                 new NavItem { Section = ShellSection.Home, Title = "Home", Subtitle = "Status at a glance", IconKey = "IconHome" },
                 new NavItem { Section = ShellSection.Gestures, Title = "Gestures", Subtitle = "Hand language & tuning", IconKey = "IconGestures" },
-                new NavItem { Section = ShellSection.Voice, Title = "Voice", Subtitle = "Local commands", IconKey = "IconVoice", Badge = "BETA" },
+                new NavItem { Section = ShellSection.Voice, Title = "Voice", Subtitle = "Wake word first", IconKey = "IconVoice", Badge = "BETA" },
                 new NavItem { Section = ShellSection.Actions, Title = "Actions", Subtitle = "What the system can do", IconKey = "IconActions" },
                 new NavItem { Section = ShellSection.Displays, Title = "Displays", Subtitle = "Spatial setup & calibration", IconKey = "IconDisplays" },
                 new NavItem { Section = ShellSection.Profiles, Title = "Profiles", Subtitle = "Saved tunings", IconKey = "IconProfiles" },
@@ -560,7 +560,9 @@ namespace KinectV2MouseControl
             overlayAlwaysOnTop = s.OverlayAlwaysOnTop;
             OverlayLeft = s.OverlayLeft;
             OverlayTop = s.OverlayTop;
-            Voice.WakeWord = string.IsNullOrEmpty(s.VoiceWakeWord) ? "" : s.VoiceWakeWord;
+            Voice.WakeThreshold = s.VoiceWakeThreshold;
+            Voice.CommandThreshold = s.VoiceCommandThreshold;
+            Voice.DismissSound = s.VoiceDismissSound;
         }
 
         /// <summary>
@@ -584,7 +586,9 @@ namespace KinectV2MouseControl
             s.OverlayLeft = OverlayLeft;
             s.OverlayTop = OverlayTop;
             s.VoiceEnabled = Voice.IsEnabled;
-            s.VoiceWakeWord = Voice.WakeWord ?? "";
+            s.VoiceWakeThreshold = Voice.WakeThreshold;
+            s.VoiceCommandThreshold = Voice.CommandThreshold;
+            s.VoiceDismissSound = Voice.DismissSound;
         }
 
         /// <summary>

@@ -198,6 +198,18 @@
                                 <TextBlock Style="{StaticResource Pill.Text}" Text="{Binding Status.TrackingText}"/>
                             </StackPanel>
                         </Border>
+                        <!-- Voice wake cycle: only on screen from "Kinect" until the outcome fades. -->
+                        <Border Style="{StaticResource HeaderPill}"
+                                Background="{Binding Voice.HudState, Converter={StaticResource VoiceSoftBrush}}"
+                                BorderBrush="{Binding Voice.HudState, Converter={StaticResource VoiceBrush}}"
+                                Visibility="{Binding Voice.HudVisible, Converter={StaticResource BoolToVis}}">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Style="{StaticResource VoicePulseDot}" Width="8" Height="8" Margin="0,0,7,0" VerticalAlignment="Center"
+                                         Fill="{Binding Voice.HudState, Converter={StaticResource VoiceBrush}}"
+                                         Effect="{Binding Voice.HudState, Converter={StaticResource VoiceGlow}}"/>
+                                <TextBlock Style="{StaticResource Pill.Text}" Foreground="{StaticResource Brush.Text}" Text="{Binding Voice.HudText}"/>
+                            </StackPanel>
+                        </Border>
                         <Border Style="{StaticResource HeaderPill}" Cursor="Hand"
                                 Background="{Binding Status.ControlState, Converter={StaticResource StateSoftBrush}}"
                                 BorderBrush="{Binding Status.ControlState, Converter={StaticResource StateBrush}}"

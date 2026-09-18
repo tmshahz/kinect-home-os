@@ -475,9 +475,10 @@ namespace KinectV2MouseControl
         /// <summary>
         /// Executes an action through the router on behalf of a non-gesture input. UI thread only.
         /// </summary>
-        public void ExecuteAction(ControlAction action, string source)
+        /// <returns>True when the router actually carried it out.</returns>
+        public bool ExecuteAction(ControlAction action, string source)
         {
-            kinectCursor.Actions.Execute(action, source);
+            return kinectCursor.Actions.Execute(action, source);
         }
 
         public DesktopLayout Desktop

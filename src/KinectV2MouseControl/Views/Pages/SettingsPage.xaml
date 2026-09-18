@@ -121,6 +121,33 @@
                         </Border>
                         <TextBlock Style="{StaticResource Text.Caption}" Margin="0,10,0,0"
                                    Text="Read these before touching filter tuning when something feels off: noise (px) while holding still is tracking noise, q is the body quality out of 6, glitches counts rejected samples, and dt is the sensor frame interval."/>
+
+                        <Grid Margin="0,18,0,10">
+                            <TextBlock Text="VOICE PIPELINE" Style="{StaticResource Text.Eyebrow}"/>
+                            <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Right" Padding="8,2" Command="{Binding Voice.ClearDiagnosticsCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <local:IconView Icon="{StaticResource IconTrash}" Size="13" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Clear decisions" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <Border Style="{StaticResource CardInset}">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Voice.DiagnosticsText}" Style="{StaticResource Text.Mono}" FontSize="11.5" LineHeight="17" TextWrapping="Wrap"/>
+                                <Border Style="{StaticResource Divider}" Margin="0,10"/>
+                                <ItemsControl ItemsSource="{Binding Voice.Decisions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" Style="{StaticResource Text.Mono}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,3"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="No voice decisions yet." Style="{StaticResource Text.Caption}"
+                                           Visibility="{Binding Voice.Decisions.Count, Converter={StaticResource Vis}, ConverterParameter=invert}"/>
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,10,0,0"
+                                   Text="Every wake and command judgement, with the recognizer's confidence and why it was accepted or refused. Background speech is only counted, never transcribed: while waiting, the recognizer can only hear the word &#8220;Kinect&#8221;."/>
                     </StackPanel>
                 </Border>
 

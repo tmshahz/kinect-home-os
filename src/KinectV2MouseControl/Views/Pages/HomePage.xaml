@@ -212,7 +212,7 @@
                             <local:IconView Icon="{StaticResource IconVoice}" Size="18" Margin="0,0,12,0" Foreground="{Binding Voice.IsListening, Converter={StaticResource OnBrush}}"/>
                             <StackPanel Grid.Column="1">
                                 <TextBlock Text="Voice" Style="{StaticResource Text.Body}"/>
-                                <TextBlock Text="{Binding Voice.StatusText, StringFormat=Local commands · {0}}" Style="{StaticResource Text.Caption}"/>
+                                <TextBlock Text="{Binding Voice.StatusText, StringFormat=Wake-gated · {0}}" Style="{StaticResource Text.Caption}"/>
                             </StackPanel>
                             <Border Grid.Column="2" Style="{StaticResource Pill}"
                                     Background="{Binding Voice.IsListening, Converter={StaticResource GoodSoftBrush}}">

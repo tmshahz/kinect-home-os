@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Threading;
 using System.Windows.Threading;
 
 namespace KinectV2MouseControl
@@ -18,6 +19,15 @@ namespace KinectV2MouseControl
         public const string SmokeTestSwitch = "--ui-smoke-test";
 
         /// <summary>
+        /// Command-line switch that runs the voice pipeline's offline acceptance test (see
+        /// VoiceSelfTest): parser, grammars, Core Audio interop, chime, and the real wake-gated
+        /// engine fed synthesized speech with the chime looped back in as echo. No microphone,
+        /// no speakers, nothing executed. Exit code 0 = passed, 3 = failed. Report in
+        /// %LOCALAPPDATA%\KinectHomeOS\voice-self-test.txt.
+        /// </summary>
+        public const string VoiceSelfTestSwitch = "--voice-self-test";
+
+        /// <summary>
         /// Installs the process-level fail-safes. A normal window close already releases every
         /// button through KinectCursor; these cover the exits that skip it - an unhandled
         /// exception, Windows logging off or shutting down, and the process being torn down -
@@ -26,6 +36,13 @@ namespace KinectV2MouseControl
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            if (e.Args != null && Array.IndexOf(e.Args, VoiceSelfTestSwitch) >= 0)
+            {
+                RuntimeLog.Suspend();
+                Shutdown(RunVoiceSelfTest());
+                return;
+            }
 
             if (e.Args != null && Array.IndexOf(e.Args, SmokeTestSwitch) >= 0)
             {
@@ -44,6 +61,43 @@ namespace KinectV2MouseControl
             MainWindow window = new MainWindow();
             MainWindow = window;
             window.Show();
+        }
+
+        private static int RunVoiceSelfTest()
+        {
+            string report = "";
+            int code = 3;
+
+            // Off the UI thread: the recognizer must not capture the WPF dispatcher, which this
+            // thread is about to block on.
+            Thread worker = new Thread(() =>
+            {
+                try
+                {
+                    code = VoiceSelfTest.Run(out report);
+                }
+                catch (Exception ex)
+                {
+                    report += Environment.NewLine + "VOICE SELF-TEST CRASHED: " + ex;
+                    code = 3;
+                }
+            });
+            worker.IsBackground = true;
+            worker.Start();
+            worker.Join();
+
+            try
+            {
+                Directory.CreateDirectory(RuntimeLog.DirectoryPath);
+                File.WriteAllText(Path.Combine(RuntimeLog.DirectoryPath, "voice-self-test.txt"), report);
+            }
+            catch (Exception)
+            {
+                // stderr still gets it.
+            }
+
+            Console.Error.WriteLine(report);
+            return code;
         }
 
         private static int RunSmokeTest()
@@ -212,6 +266,11 @@ namespace KinectV2MouseControl
             ActivityLog.Post(ActivityKind.Action, "Scroll up", "Left fist clutch", "gesture", "scroll+", 1.5);
             ActivityLog.Post(ActivityKind.Action, "Scroll up", "Left fist clutch", "gesture", "scroll+", 1.5);
             ActivityLog.Post(ActivityKind.Voice, "Voice commands on", "Wake word “Kinect”", "control center");
+            shell.Voice.PreviewHud(VoiceHudState.Listening);
+            shell.Navigate(ShellSection.Voice);
+            RenderElement(root, shell, Path.Combine(directory, "shell-Voice-listening.png"), width, height, false);
+            shell.Voice.PreviewHud(VoiceHudState.Executed);
+            RenderElement(root, shell, Path.Combine(directory, "shell-Voice-executed.png"), width, height, false);
             shell.Navigate(ShellSection.Home);
             RenderElement(root, shell, Path.Combine(directory, "shell-Home-active.png"), width, height, false);
             shell.Navigate(ShellSection.Gestures);
@@ -223,6 +282,10 @@ namespace KinectV2MouseControl
                 if (widget != null)
                 {
                     overlay.Content = null;
+                    RenderElement(widget, shell, Path.Combine(directory, "overlay-voice-executed.png"), 460, 110, true);
+                    shell.Voice.PreviewHud(VoiceHudState.Listening);
+                    RenderElement(widget, shell, Path.Combine(directory, "overlay-voice-listening.png"), 460, 110, true);
+                    shell.Voice.PreviewHud(VoiceHudState.Hidden);
                     RenderElement(widget, shell, Path.Combine(directory, "overlay-widget.png"), 460, 110, true);
                 }
             }

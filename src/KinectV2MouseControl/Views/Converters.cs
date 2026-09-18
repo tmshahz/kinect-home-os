@@ -122,6 +122,40 @@ namespace KinectV2MouseControl
         }
     }
 
+    /// <summary>
+    /// VoiceHudState → one of five values (brushes, glows), for the voice HUD everywhere.
+    /// </summary>
+    public class VoiceStateToValueConverter : IValueConverter
+    {
+        public object Hidden { get; set; }
+        public object Wake { get; set; }
+        public object Listening { get; set; }
+        public object Executed { get; set; }
+        public object Rejected { get; set; }
+
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (!(value is VoiceHudState))
+            {
+                return Hidden;
+            }
+
+            switch ((VoiceHudState)value)
+            {
+                case VoiceHudState.Wake: return Wake;
+                case VoiceHudState.Listening: return Listening;
+                case VoiceHudState.Executed: return Executed;
+                case VoiceHudState.Rejected: return Rejected;
+                default: return Hidden;
+            }
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return Binding.DoNothing;
+        }
+    }
+
     public class ActivityKindToBrushConverter : IValueConverter
     {
         public Brush Action { get; set; }

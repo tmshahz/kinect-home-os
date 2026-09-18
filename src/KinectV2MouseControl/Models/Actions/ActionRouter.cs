@@ -68,7 +68,15 @@ namespace KinectV2MouseControl
             Execute(action, GestureSource);
         }
 
-        public void Execute(ControlAction action, string source)
+        /// <summary>
+        /// Carries out one action on behalf of <paramref name="source"/>.
+        /// </summary>
+        /// <returns>
+        /// True when the action was actually performed (and ActionExecuted raised). False for a
+        /// no-op, an unknown action, or a failure such as the audio endpoint being unavailable,
+        /// so a caller like the voice HUD never reports something that did not happen.
+        /// </returns>
+        public bool Execute(ControlAction action, string source)
         {
             LastSource = source ?? GestureSource;
 
@@ -94,7 +102,7 @@ namespace KinectV2MouseControl
                     if (!ExecuteScroll(action.Value))
                     {
                         // Nothing whole to submit yet; don't report a no-op as an action.
-                        return;
+                        return false;
                     }
                     break;
 
@@ -109,7 +117,7 @@ namespace KinectV2MouseControl
                 case ControlActionType.ToggleControl:
                     if (ControlGate == null)
                     {
-                        return;
+                        return false;
                     }
 
                     // Note this re-enters the gesture layer: toggling resets every recognizer,
@@ -122,7 +130,7 @@ namespace KinectV2MouseControl
                 case ControlActionType.DisableControl:
                     if (ControlGate == null)
                     {
-                        return;
+                        return false;
                     }
 
                     ControlGate.SetControlEnabled(action.Type == ControlActionType.EnableControl, LastSource);
@@ -169,29 +177,42 @@ namespace KinectV2MouseControl
                     break;
 
                 case ControlActionType.VolumeUp:
-                    KeyboardControl.Tap(Win32Input.VK_VOLUME_UP);
+                    // Each media-key step is 2%; five make a change you can actually hear, and
+                    // the keys bring up the Windows volume overlay as feedback.
+                    KeyboardControl.Tap(Win32Input.VK_VOLUME_UP, VolumeStepKeys);
                     break;
 
                 case ControlActionType.VolumeDown:
-                    KeyboardControl.Tap(Win32Input.VK_VOLUME_DOWN);
+                    KeyboardControl.Tap(Win32Input.VK_VOLUME_DOWN, VolumeStepKeys);
                     break;
 
-                case ControlActionType.VolumeMute:
-                    KeyboardControl.Tap(Win32Input.VK_VOLUME_MUTE);
+                case ControlActionType.SetVolume:
+                    if (!ExecuteSetVolume(action.Value))
+                    {
+                        return false;
+                    }
+                    break;
+
+                case ControlActionType.Mute:
+                case ControlActionType.Unmute:
+                    if (!ExecuteMute(action.Type == ControlActionType.Mute))
+                    {
+                        return false;
+                    }
                     break;
 
                 case ControlActionType.LaunchApp:
                     if (!LaunchApp(action.Parameter))
                     {
-                        return;
+                        return false;
                     }
                     break;
 
                 case ControlActionType.None:
-                    return;
+                    return false;
 
                 default:
-                    return;
+                    return false;
             }
 
             EventHandler<ControlAction> handler = ActionExecuted;
@@ -199,6 +220,48 @@ namespace KinectV2MouseControl
             {
                 handler.Invoke(this, action);
             }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Media-key presses per "volume up/down" (2% each).
+        /// </summary>
+        private const int VolumeStepKeys = 5;
+
+        /// <summary>
+        /// Absolute master volume through Core Audio. The level must already be a whole number
+        /// in 0-100: the parser refuses anything else, and this refuses it again rather than
+        /// clamping, so a malformed request can never land on some other volume.
+        /// </summary>
+        private static bool ExecuteSetVolume(double value)
+        {
+            if (double.IsNaN(value) || value < 0 || value > 100 || value != Math.Floor(value))
+            {
+                RuntimeLog.Write("SetVolume refused: " + value);
+                return false;
+            }
+
+            string error;
+            if (!SystemVolume.TrySetPercent((int)value, true, out error))
+            {
+                RuntimeLog.Write("SetVolume failed: " + error);
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool ExecuteMute(bool mute)
+        {
+            string error;
+            if (!SystemVolume.TrySetMute(mute, out error))
+            {
+                RuntimeLog.Write((mute ? "Mute" : "Unmute") + " failed: " + error);
+                return false;
+            }
+
+            return true;
         }
 
         private bool ExecuteScroll(double notches)

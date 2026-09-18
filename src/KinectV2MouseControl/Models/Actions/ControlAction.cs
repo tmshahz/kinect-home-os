@@ -63,7 +63,18 @@ namespace KinectV2MouseControl
         PreviousTrack,
         VolumeUp,
         VolumeDown,
-        VolumeMute,
+
+        /// <summary>
+        /// Absolute master volume. Value carries the level in percent, 0-100. Values outside
+        /// that range are refused by the router, never clamped into something unexpected.
+        /// </summary>
+        SetVolume,
+
+        /// <summary>
+        /// Explicit mute / unmute (not the media-key toggle), so "unmute" can never mute.
+        /// </summary>
+        Mute,
+        Unmute,
 
         /// <summary>
         /// Starts a program, document or URL. Parameter carries the target.
@@ -130,6 +141,11 @@ namespace KinectV2MouseControl
             return new ControlAction(ControlActionType.LaunchApp, 0, target);
         }
 
+        public static ControlAction SetVolumeTo(int percent)
+        {
+            return new ControlAction(ControlActionType.SetVolume, percent);
+        }
+
         /// <summary>
         /// Human-readable name, shared by the diagnostics readout, the activity feed and the
         /// control center's action catalog.
@@ -160,7 +176,9 @@ namespace KinectV2MouseControl
                 case ControlActionType.PreviousTrack: return "Previous track";
                 case ControlActionType.VolumeUp: return "Volume up";
                 case ControlActionType.VolumeDown: return "Volume down";
-                case ControlActionType.VolumeMute: return "Mute";
+                case ControlActionType.SetVolume: return "Set volume";
+                case ControlActionType.Mute: return "Mute";
+                case ControlActionType.Unmute: return "Unmute";
                 case ControlActionType.LaunchApp: return "Launch app";
                 default: return type.ToString();
             }
@@ -178,6 +196,11 @@ namespace KinectV2MouseControl
             if (Type == ControlActionType.LaunchApp && !string.IsNullOrEmpty(Parameter))
             {
                 return "Launch " + Parameter;
+            }
+
+            if (Type == ControlActionType.SetVolume)
+            {
+                return "Volume → " + ((int)Value).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
             }
 
             return Describe(Type);

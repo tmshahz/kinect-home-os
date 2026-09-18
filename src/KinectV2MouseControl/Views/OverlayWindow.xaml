@@ -51,9 +51,20 @@
     </Window.Resources>
 
     <Grid Margin="16">
-        <Border CornerRadius="20" Background="#EC0C1524" BorderBrush="{StaticResource Brush.SurfaceBorderStrong}"
+        <Border CornerRadius="20" Background="#EC0C1524"
                 BorderThickness="1" Effect="{StaticResource Effect.WidgetShadow}"
                 MouseLeftButtonDown="Border_MouseLeftButtonDown" Cursor="SizeAll">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="BorderBrush" Value="{StaticResource Brush.SurfaceBorderStrong}"/>
+                    <Style.Triggers>
+                        <!-- The whole widget takes the voice colour while a wake cycle is on screen. -->
+                        <DataTrigger Binding="{Binding Voice.HudVisible}" Value="True">
+                            <Setter Property="BorderBrush" Value="{Binding Voice.HudState, Converter={StaticResource VoiceBrush}}"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
             <Grid Margin="14,10,10,10">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -71,17 +82,31 @@
                     <Ellipse Width="22" Height="22" Stroke="{StaticResource Brush.SurfaceBorderStrong}" StrokeThickness="1"/>
                 </Grid>
 
-                <!-- Text -->
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" MinWidth="150" MaxWidth="220">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="KINECT-OS" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Accent}" VerticalAlignment="Center"/>
-                        <TextBlock Text="{Binding Engine.ActiveProfileName}" FontSize="9.5" Foreground="{StaticResource Brush.TextMuted}"
-                                   Margin="6,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <!-- Text: control status normally, the voice cycle while one is on screen -->
+                <Grid Grid.Column="1" VerticalAlignment="Center" MinWidth="150" MaxWidth="220">
+                    <StackPanel Visibility="{Binding Voice.HudVisible, Converter={StaticResource Vis}, ConverterParameter=invert}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="KINECT-OS" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Accent}" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Engine.ActiveProfileName}" FontSize="9.5" Foreground="{StaticResource Brush.TextMuted}"
+                                       Margin="6,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Status.Headline}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding Status.Subline}" FontSize="11" Foreground="{StaticResource Brush.TextDim}"
+                                   FontFamily="{StaticResource Font.Text}" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
-                    <TextBlock Text="{Binding Status.Headline}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                    <TextBlock Text="{Binding Status.Subline}" FontSize="11" Foreground="{StaticResource Brush.TextDim}"
-                               FontFamily="{StaticResource Font.Text}" TextTrimming="CharacterEllipsis"/>
-                </StackPanel>
+                    <StackPanel Visibility="{Binding Voice.HudVisible, Converter={StaticResource BoolToVis}}">
+                        <TextBlock Text="KINECT" FontSize="9.5" FontWeight="Bold"
+                                   Foreground="{Binding Voice.HudState, Converter={StaticResource VoiceBrush}}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
+                            <Ellipse Style="{StaticResource VoicePulseDot}" Width="8" Height="8" Margin="0,1,7,0" VerticalAlignment="Center"
+                                     Fill="{Binding Voice.HudState, Converter={StaticResource VoiceBrush}}"
+                                     Effect="{Binding Voice.HudState, Converter={StaticResource VoiceGlow}}"/>
+                            <TextBlock Text="{Binding Voice.HudText}" FontSize="13.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Voice.HudDetail}" FontSize="10" Foreground="{StaticResource Brush.TextMuted}"
+                                   FontFamily="{StaticResource Font.Text}" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </Grid>
 
                 <!-- Hands + voice -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,6,0">
@@ -97,11 +122,12 @@
                         <local:IconView Icon="{StaticResource IconGestures}" Size="15"
                                         Foreground="{Binding Status.IsPointerActive, Converter={StaticResource OnBrush}}"/>
                     </Border>
-                    <Border Style="{StaticResource HandChip}" ToolTip="Voice commands"
+                    <Border Style="{StaticResource HandChip}" ToolTip="{Binding Voice.StatusText}"
                             Background="{Binding Voice.IsListening, Converter={StaticResource OnSoftBrush}}"
-                            BorderBrush="{Binding Voice.IsHearingSpeech, Converter={StaticResource OnBorderBrush}}">
+                            BorderBrush="{Binding Voice.IsCommandWindowOpen, Converter={StaticResource OnBorderBrush}}">
                         <local:IconView Icon="{StaticResource IconVoice}" Size="14"
-                                        Foreground="{Binding Voice.IsListening, Converter={StaticResource OnBrush}}"/>
+                                        Foreground="{Binding Voice.IsListening, Converter={StaticResource OnBrush}}"
+                                        Effect="{Binding Voice.IsCommandWindowOpen, Converter={StaticResource OnGlow}}"/>
                     </Border>
                 </StackPanel>
 

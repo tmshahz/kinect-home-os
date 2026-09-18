@@ -82,9 +82,27 @@ namespace KinectV2MouseControl
         /// </summary>
         public static void Tap(ushort virtualKey)
         {
-            Win32Input.Send(
-                Win32Input.CreateKeyInput(virtualKey, false),
-                Win32Input.CreateKeyInput(virtualKey, true));
+            Tap(virtualKey, 1);
+        }
+
+        /// <summary>
+        /// Several presses of the same key in one SendInput batch (volume steps).
+        /// </summary>
+        public static void Tap(ushort virtualKey, int count)
+        {
+            if (count < 1)
+            {
+                return;
+            }
+
+            Win32Input.INPUT[] inputs = new Win32Input.INPUT[count * 2];
+            for (int i = 0; i < count; i++)
+            {
+                inputs[2 * i] = Win32Input.CreateKeyInput(virtualKey, false);
+                inputs[2 * i + 1] = Win32Input.CreateKeyInput(virtualKey, true);
+            }
+
+            Win32Input.Send(inputs);
         }
 
         /// <summary>

@@ -251,11 +251,33 @@ namespace KinectV2MouseControl
                 null, null, null, null),
 
             new HelpEntry("Voice commands",
-                "Listens for the built-in phrases through the Windows speech recognizer, entirely on this PC, and runs them through the same action router as gestures. Off by default. If the Kinect starts reconnecting after enabling it, use a different default microphone.",
+                "Wake-gated local voice control. Say “Kinect” on its own and wait for the chime; the next " +
+                "4 seconds accept exactly one command, then it goes back to waiting for “Kinect”. " +
+                "Nothing else is acted on: commands said without the wake cycle, a second command after the " +
+                "first, and “Kinect” in the middle of a sentence are all ignored. Recognition runs on this PC " +
+                "(Windows speech recognizer); commands go through the same action router as gestures. " +
+                "If the Kinect starts reconnecting after enabling it, use a different default microphone.",
                 null, null, null, null),
 
-            new HelpEntry("Wake word",
-                "Said before every voice command, e.g. “Kinect, next window”. It is part of the recognition grammar, so ordinary conversation cannot trigger commands. Empty means bare commands are accepted, which is convenient but far more prone to false triggers.",
+            new HelpEntry("Wake confidence",
+                "How sure the recognizer must be that it heard “Kinect” (on its own) before it chimes and opens a command window. " +
+                "The last wake readout on this page shows the confidence of every near miss, so you can see where your voice lands.",
+                "fewer false wakes from conversation, TV and similar-sounding words.",
+                "“Kinect” is accepted more readily from across the room or when said quickly.",
+                "you have to repeat “Kinect”, or it never chimes at all.",
+                "it chimes on its own during conversation (no command runs without one, but it is distracting)."),
+
+            new HelpEntry("Command confidence",
+                "How sure the recognizer must be about the phrase you say after the chime. " +
+                "A rejected phrase just closes the window; nothing is executed.",
+                "misheard commands are refused rather than run.",
+                "commands said softly or from further away are accepted.",
+                "clear commands are refused and you have to wake it again.",
+                "a similar-sounding command may run instead of the one you said."),
+
+            new HelpEntry("Dismiss sound",
+                "A quiet falling tone when a command window closes without a command - timed out, not recognized, " +
+                "cancelled, or you spoke before the chime. The wake chime itself always plays: it is the signal to speak.",
                 null, null, null, null),
 
             new HelpEntry("Minimize to the floating widget",

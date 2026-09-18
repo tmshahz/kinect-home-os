@@ -50,7 +50,7 @@
     <Reference Include="System.Data" />
     <!-- System.Drawing + System.Windows.Forms: only for the notification-area icon (TrayIcon.cs). -->
     <Reference Include="System.Drawing" />
-    <!-- System.Speech: the local, in-process voice command recognizer (LocalVoiceEngine.cs). -->
+    <!-- System.Speech: the local, in-process wake-gated voice recognizer (WakeGatedVoiceEngine.cs) and the self-test voices. -->
     <Reference Include="System.Speech" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
@@ -214,6 +214,7 @@
     <Compile Include="Models\CursorControlOutput\CursorOutputLoop.cs" />
     <Compile Include="Models\CursorControlOutput\Win32Input.cs" />
     <Compile Include="Models\CursorControlOutput\KeyboardControl.cs" />
+    <Compile Include="Models\CursorControlOutput\SystemVolume.cs" />
     <Compile Include="Models\Actions\ControlAction.cs" />
     <Compile Include="Models\Actions\ActionRouter.cs" />
     <Compile Include="Models\Actions\ActionCatalog.cs" />
@@ -231,8 +232,12 @@
     <Compile Include="Models\Diagnostics\ActivityLog.cs" />
     <Compile Include="Models\Profiles\ProfileStore.cs" />
     <Compile Include="Models\Voice\VoiceCommand.cs" />
-    <Compile Include="Models\Voice\IVoiceEngine.cs" />
-    <Compile Include="Models\Voice\LocalVoiceEngine.cs" />
+    <Compile Include="Models\Voice\VoiceCommandParser.cs" />
+    <Compile Include="Models\Voice\VoiceGrammars.cs" />
+    <Compile Include="Models\Voice\VoiceSession.cs" />
+    <Compile Include="Models\Voice\WakeGatedVoiceEngine.cs" />
+    <Compile Include="Models\Voice\VoiceFeedbackSounds.cs" />
+    <Compile Include="Models\Voice\VoiceSelfTest.cs" />
     <Compile Include="Models\Voice\AudioInputDevices.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>

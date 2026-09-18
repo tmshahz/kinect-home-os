@@ -385,13 +385,37 @@ namespace KinectV2MouseControl.Properties {
 
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("Kinect")]
-        public string VoiceWakeWord {
+        [global::System.Configuration.DefaultSettingValueAttribute("0.8")]
+        public double VoiceWakeThreshold {
             get {
-                return ((string)(this["VoiceWakeWord"]));
+                return ((double)(this["VoiceWakeThreshold"]));
             }
             set {
-                this["VoiceWakeWord"] = value;
+                this["VoiceWakeThreshold"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.7")]
+        public double VoiceCommandThreshold {
+            get {
+                return ((double)(this["VoiceCommandThreshold"]));
+            }
+            set {
+                this["VoiceCommandThreshold"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool VoiceDismissSound {
+            get {
+                return ((bool)(this["VoiceDismissSound"]));
+            }
+            set {
+                this["VoiceDismissSound"] = value;
             }
         }
     }

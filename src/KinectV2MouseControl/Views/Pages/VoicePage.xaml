@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:KinectV2MouseControl">
     <UserControl.Resources>
-        <Style x:Key="MicPulse" TargetType="Ellipse">
+        <!-- Expanding ring around the orb while the command window is open. -->
+        <Style x:Key="ListenRing" TargetType="Ellipse">
             <Setter Property="Opacity" Value="0"/>
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
             <Setter Property="RenderTransform">
@@ -12,39 +13,48 @@
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding Voice.IsListening}" Value="True">
+                <DataTrigger Binding="{Binding Voice.IsCommandWindowOpen}" Value="True">
                     <DataTrigger.EnterActions>
-                        <BeginStoryboard x:Name="MicPulseStory">
+                        <BeginStoryboard x:Name="ListenRingStory">
                             <Storyboard RepeatBehavior="Forever">
-                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.6" To="0" Duration="0:0:1.8"/>
-                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" From="1" To="1.9" Duration="0:0:1.8"/>
-                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" From="1" To="1.9" Duration="0:0:1.8"/>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.7" To="0" Duration="0:0:1.1"/>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" From="1" To="1.8" Duration="0:0:1.1"/>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" From="1" To="1.8" Duration="0:0:1.1"/>
                             </Storyboard>
                         </BeginStoryboard>
                     </DataTrigger.EnterActions>
                     <DataTrigger.ExitActions>
-                        <StopStoryboard BeginStoryboardName="MicPulseStory"/>
+                        <StopStoryboard BeginStoryboardName="ListenRingStory"/>
                     </DataTrigger.ExitActions>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
 
+        <Style x:Key="FlowStep" TargetType="Border" BasedOn="{StaticResource CardInset}">
+            <Setter Property="Padding" Value="12,10"/>
+        </Style>
+        <Style x:Key="FlowStepNumber" TargetType="TextBlock" BasedOn="{StaticResource Text.EyebrowAccent}">
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style x:Key="Rule" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+            <Setter Property="Margin" Value="0,0,0,5"/>
+        </Style>
+
         <DataTemplate x:Key="CommandTemplate">
-            <Border BorderBrush="{StaticResource Brush.Divider}" BorderThickness="0,0,0,1" Padding="0,9">
+            <Border BorderBrush="{StaticResource Brush.Divider}" BorderThickness="0,0,0,1" Padding="0,8">
                 <Grid>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="170"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <StackPanel>
+                    <StackPanel Margin="0,0,10,0">
                         <TextBlock Text="{Binding Phrase, StringFormat=&#8220;{0}&#8221;}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"
                                    Foreground="{Binding IsAvailable, Converter={StaticResource OnBrush}}"/>
-                        <TextBlock Text="{Binding AliasText}" Style="{StaticResource Text.Caption}" FontSize="11"
+                        <TextBlock Text="{Binding Description}" Style="{StaticResource Text.Caption}" Margin="0,1,0,0"/>
+                        <TextBlock Text="{Binding AliasText}" Style="{StaticResource Text.Caption}" FontSize="11" Foreground="{StaticResource Brush.TextFaint}"
                                    Visibility="{Binding AliasText, Converter={StaticResource Vis}}"/>
                     </StackPanel>
-                    <TextBlock Grid.Column="1" Text="{Binding Description}" Style="{StaticResource Text.Caption}" VerticalAlignment="Center" Margin="10,0"/>
-                    <Border Grid.Column="2" Style="{StaticResource Pill}" Padding="8,2"
+                    <Border Grid.Column="1" Style="{StaticResource Pill}" Padding="8,2" VerticalAlignment="Top"
                             Background="{Binding IsAvailable, Converter={StaticResource PlannedSoftBrush}}">
                         <TextBlock Style="{StaticResource Pill.Text}" FontSize="10.5" Text="{Binding StatusText}"
                                    Foreground="{Binding IsAvailable, Converter={StaticResource PlannedBrush}}"/>
@@ -54,11 +64,9 @@
         </DataTemplate>
 
         <DataTemplate x:Key="CommandGroupTemplate">
-            <StackPanel Margin="0,0,0,18">
-                <Grid Margin="0,0,0,4">
-                    <TextBlock Text="{Binding Title}" Style="{StaticResource Text.EyebrowAccent}"/>
-                    <TextBlock Text="{Binding Detail}" Style="{StaticResource Text.Caption}" FontSize="11" HorizontalAlignment="Right"/>
-                </Grid>
+            <StackPanel Margin="0,0,0,16">
+                <TextBlock Text="{Binding Title}" Style="{StaticResource Text.EyebrowAccent}"/>
+                <TextBlock Text="{Binding Detail}" Style="{StaticResource Text.Caption}" FontSize="11" Margin="0,1,0,2"/>
                 <ItemsControl ItemsSource="{Binding Commands}" ItemTemplate="{StaticResource CommandTemplate}"/>
             </StackPanel>
         </DataTemplate>
@@ -71,37 +79,81 @@
                 <ColumnDefinition Width="6*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- ============================ Engine & mic ============================ -->
+            <!-- ============================ Left column ============================ -->
             <StackPanel Grid.Column="0" Margin="0,0,16,0">
-                <Border Style="{StaticResource CardStrong}">
+
+                <!-- Live wake-cycle state -->
+                <Border Style="{StaticResource CardStrong}"
+                        BorderBrush="{Binding Voice.PhaseState, Converter={StaticResource VoiceBrush}}">
                     <StackPanel>
                         <Grid>
-                            <TextBlock Text="LOCAL VOICE ENGINE" Style="{StaticResource Text.Eyebrow}"/>
-                            <Border Style="{StaticResource Pill}" HorizontalAlignment="Right" Padding="8,2"
-                                    Background="{StaticResource Brush.AccentFaint}" BorderBrush="{StaticResource Brush.AccentSoft}">
-                                <TextBlock Style="{StaticResource Pill.Text}" FontSize="10" Text="BETA" Foreground="{StaticResource Brush.Accent}"/>
-                            </Border>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="WAKE-GATED VOICE" Style="{StaticResource Text.Eyebrow}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" Margin="0,0,12,0"/>
+                            <CheckBox Grid.Column="1" x:Name="VoiceToggle" Style="{StaticResource Toggle}" Content="Voice commands"
+                                      IsChecked="{Binding Voice.IsEnabled, Mode=TwoWay}"/>
                         </Grid>
 
-                        <Grid Margin="0,16,0,0">
+                        <Grid Margin="0,18,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Grid Width="72" Height="72" Margin="0,0,20,0">
-                                <Ellipse Style="{StaticResource MicPulse}" Fill="{StaticResource Brush.Accent}"/>
-                                <Ellipse Width="60" Height="60" Fill="{Binding Voice.IsListening, Converter={StaticResource OnSoftBrush}}"
-                                         Stroke="{Binding Voice.IsListening, Converter={StaticResource OnBorderBrush}}" StrokeThickness="1"/>
-                                <local:IconView Icon="{StaticResource IconVoice}" Size="26"
-                                                Foreground="{Binding Voice.IsListening, Converter={StaticResource OnBrush}}"
-                                                Effect="{Binding Voice.IsHearingSpeech, Converter={StaticResource OnGlow}}"/>
+                            <Grid Width="86" Height="86" Margin="0,0,22,0" VerticalAlignment="Center">
+                                <Ellipse Style="{StaticResource ListenRing}" Fill="{Binding Voice.PhaseState, Converter={StaticResource VoiceSoftBrush}}"
+                                         Stroke="{Binding Voice.PhaseState, Converter={StaticResource VoiceBrush}}" StrokeThickness="1"/>
+                                <Ellipse Width="70" Height="70" Fill="{Binding Voice.PhaseState, Converter={StaticResource VoiceSoftBrush}}"
+                                         Stroke="{Binding Voice.PhaseState, Converter={StaticResource VoiceBrush}}" StrokeThickness="1.2"/>
+                                <local:IconView Icon="{StaticResource IconVoice}" Size="28"
+                                                Foreground="{Binding Voice.PhaseState, Converter={StaticResource VoiceBrush}}"
+                                                Effect="{Binding Voice.PhaseState, Converter={StaticResource VoiceGlow}}"/>
                             </Grid>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Voice.StatusText}" Style="{StaticResource Text.Display}" FontSize="26"/>
-                                <TextBlock Text="{Binding Voice.BackendText}" Style="{StaticResource Text.Caption}" TextTrimming="CharacterEllipsis"/>
-                                <CheckBox x:Name="VoiceToggle" Style="{StaticResource Toggle}" Content="Voice commands" Margin="0,12,0,0"
-                                          IsChecked="{Binding Voice.IsEnabled, Mode=TwoWay}"/>
+                                <TextBlock Text="{Binding Voice.PhaseTitle}" Style="{StaticResource Text.EyebrowAccent}" FontSize="12" TextWrapping="Wrap"
+                                           Foreground="{Binding Voice.PhaseState, Converter={StaticResource VoiceBrush}}"/>
+                                <TextBlock Text="{Binding Voice.PhaseDetail}" Style="{StaticResource Text.Display}" FontSize="22" Margin="0,4,0,0"/>
+
+                                <!-- Command-window countdown -->
+                                <Grid Margin="0,12,0,0" Visibility="{Binding Voice.IsAwaitingCommand, Converter={StaticResource BoolToVis}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid Height="5" VerticalAlignment="Center">
+                                        <Border Background="{StaticResource Brush.SurfaceBorderStrong}" CornerRadius="3"/>
+                                        <Border Background="{StaticResource Brush.AccentGradient}" CornerRadius="3" RenderTransformOrigin="0,0.5"
+                                                Effect="{StaticResource Effect.AccentGlowSoft}">
+                                            <Border.RenderTransform>
+                                                <ScaleTransform ScaleX="{Binding Voice.ListeningRemaining}" ScaleY="1"/>
+                                            </Border.RenderTransform>
+                                        </Border>
+                                    </Grid>
+                                    <TextBlock Grid.Column="1" Text="{Binding Voice.ListeningSecondsText}" Style="{StaticResource Text.Mono}" Margin="10,0,0,0" MinWidth="36"/>
+                                </Grid>
                             </StackPanel>
+                        </Grid>
+
+                        <!-- Microphone level while on -->
+                        <Grid Margin="0,18,0,0" Visibility="{Binding Voice.IsListening, Converter={StaticResource BoolToVis}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="MIC" Style="{StaticResource Text.Eyebrow}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                            <Grid Grid.Column="1" Height="4" VerticalAlignment="Center">
+                                <Border Background="{StaticResource Brush.SurfaceBorder}" CornerRadius="2"/>
+                                <Border Background="{StaticResource Brush.TextDim}" CornerRadius="2" RenderTransformOrigin="0,0.5" Opacity="0.8">
+                                    <Border.RenderTransform>
+                                        <ScaleTransform ScaleX="{Binding Voice.AudioLevel}" ScaleY="1"/>
+                                    </Border.RenderTransform>
+                                </Border>
+                            </Grid>
+                            <TextBlock Grid.Column="2" Text="{Binding Voice.BackendText}" Style="{StaticResource Text.Caption}" FontSize="11"
+                                       Margin="10,0,0,0" MaxWidth="230" TextTrimming="CharacterEllipsis"/>
                         </Grid>
 
                         <Border Style="{StaticResource CardInset}" Margin="0,16,0,0"
@@ -109,39 +161,86 @@
                                 Visibility="{Binding Voice.HasError, Converter={StaticResource BoolToVis}}">
                             <TextBlock Text="{Binding Voice.ErrorText}" Style="{StaticResource Text.Body}"/>
                         </Border>
-
-                        <Border Style="{StaticResource CardInset}" Margin="0,16,0,0">
-                            <StackPanel>
-                                <TextBlock Text="LAST HEARD" Style="{StaticResource Text.Eyebrow}"/>
-                                <TextBlock Text="{Binding Voice.LastHeardText}" Style="{StaticResource Text.CardTitle}" Margin="0,4,0,0"/>
-                                <TextBlock Text="{Binding Voice.LastHeardDetail}" Style="{StaticResource Text.Caption}"/>
-                            </StackPanel>
-                        </Border>
-
-                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,14,0,0"
-                                   Text="Recognition runs on this PC through the Windows speech recognizer with a closed grammar of the phrases listed here. Nothing is sent anywhere. Recognized commands go through the same action router as gestures."/>
                     </StackPanel>
                 </Border>
 
+                <!-- How to talk to it -->
                 <Border Style="{StaticResource Card}" Margin="0,16,0,0">
                     <StackPanel>
-                        <TextBlock Text="WAKE WORD" Style="{StaticResource Text.Eyebrow}"/>
-                        <Grid Margin="0,10,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="200"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="WakeWordBox" Style="{StaticResource TextBox.Field}"
-                                     Text="{Binding Voice.WakeWord, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
-                                     KeyDown="WakeWordBox_KeyDown"/>
-                            <TextBlock Grid.Column="1" Text="{Binding Voice.WakeWordExample}" Style="{StaticResource Text.BodyDim}"
-                                       VerticalAlignment="Center" Margin="14,0,0,0"/>
-                        </Grid>
-                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,10,0,0"
-                                   Text="Said before every command. Leave it empty to accept bare commands, at the cost of more false triggers from normal conversation."/>
+                        <TextBlock Text="HOW TO TALK TO KINECT-OS" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,12"/>
+                        <UniformGrid Columns="2" Margin="-4,0">
+                            <Border Style="{StaticResource FlowStep}" Margin="4,0,4,8">
+                                <StackPanel>
+                                    <TextBlock Text="1" Style="{StaticResource FlowStepNumber}"/>
+                                    <TextBlock Text="&#8220;Kinect&#8221;" Style="{StaticResource Text.Body}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="on its own" Style="{StaticResource Text.Caption}" FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource FlowStep}" Margin="4,0,4,8" BorderBrush="{StaticResource Brush.AccentSoft}">
+                                <StackPanel>
+                                    <TextBlock Text="2" Style="{StaticResource FlowStepNumber}"/>
+                                    <TextBlock Text="&#10022; chime" Style="{StaticResource Text.Body}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Accent}"/>
+                                    <TextBlock Text="now speak" Style="{StaticResource Text.Caption}" FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource FlowStep}" Margin="4,0">
+                                <StackPanel>
+                                    <TextBlock Text="3" Style="{StaticResource FlowStepNumber}"/>
+                                    <TextBlock Text="&#8220;volume 70&#8221;" Style="{StaticResource Text.Body}" FontWeight="SemiBold"/>
+                                    <TextBlock Style="{StaticResource Text.Caption}" FontSize="11">
+                                        <Run Text="within "/><Run Text="{Binding Voice.CommandWindowText, Mode=OneWay}"/>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource FlowStep}" Margin="4,0">
+                                <StackPanel>
+                                    <TextBlock Text="4" Style="{StaticResource FlowStepNumber}"/>
+                                    <TextBlock Text="Done" Style="{StaticResource Text.Body}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="back to waiting" Style="{StaticResource Text.Caption}" FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                        <StackPanel Margin="0,14,0,0">
+                            <TextBlock Style="{StaticResource Rule}" Text="&#8226;  One wake = one command. To do something else, say &#8220;Kinect&#8221; again."/>
+                            <TextBlock Style="{StaticResource Rule}" Text="&#8226;  Wait for the chime. Speech that starts before it, or runs on from &#8220;Kinect&#8221;, is ignored."/>
+                            <TextBlock Style="{StaticResource Rule}" Text="&#8226;  &#8220;Kinect&#8221; inside a sentence does nothing, and neither does a command said without the wake word."/>
+                            <TextBlock Style="{StaticResource Rule}" Text="&#8226;  Changed your mind? Say &#8220;cancel&#8221;, or just wait: the window closes by itself." Margin="0"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
+                <!-- Sensitivity -->
+                <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                    <StackPanel>
+                        <TextBlock Text="SENSITIVITY" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,6"/>
+                        <local:TuningSlider Label="Wake confidence" Minimum="0.3" Maximum="0.99" SmallChange="0.01" LargeChange="0.05"
+                                            Value="{Binding Voice.WakeThreshold}"/>
+                        <local:TuningSlider Label="Command confidence" Minimum="0.3" Maximum="0.99" SmallChange="0.01" LargeChange="0.05"
+                                            Value="{Binding Voice.CommandThreshold}"/>
+                        <CheckBox x:Name="DismissSoundCheck" Style="{StaticResource Toggle}" Content="Dismiss sound" Margin="0,6,0,14"
+                                  IsChecked="{Binding Voice.DismissSound, Mode=TwoWay}"/>
+                        <UniformGrid Columns="2" Margin="-6,0">
+                            <Border Style="{StaticResource CardInset}" Margin="6,0" Padding="12,10">
+                                <StackPanel>
+                                    <TextBlock Text="LAST WAKE" Style="{StaticResource Text.Eyebrow}"/>
+                                    <TextBlock Text="{Binding Voice.LastWakeText}" Style="{StaticResource Text.CardTitle}" Margin="0,4,0,0"/>
+                                    <TextBlock Text="{Binding Voice.LastWakeDetail}" Style="{StaticResource Text.Caption}" FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+                            <Border Style="{StaticResource CardInset}" Margin="6,0" Padding="12,10">
+                                <StackPanel>
+                                    <TextBlock Text="LAST COMMAND" Style="{StaticResource Text.Eyebrow}"/>
+                                    <TextBlock Text="{Binding Voice.LastCommandText}" Style="{StaticResource Text.CardTitle}" Margin="0,4,0,0"/>
+                                    <TextBlock Text="{Binding Voice.LastCommandDetail}" Style="{StaticResource Text.Caption}" FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,12,0,0"
+                                   Text="If &#8220;Kinect&#8221; is hard to trigger, lower Wake confidence a little at a time while watching Last wake. If it chimes during conversation, raise it. The full decision log is under Settings &#8594; Advanced diagnostics."/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Microphone -->
                 <Border Style="{StaticResource Card}" Margin="0,16,0,0">
                     <StackPanel>
                         <Grid>
@@ -157,26 +256,28 @@
                         <TextBlock Text="{Binding Voice.MicrophoneList}" Style="{StaticResource Text.Mono}" Margin="16,6,0,0"
                                    Visibility="{Binding Voice.MicrophoneList, Converter={StaticResource Vis}}"/>
                         <TextBlock Style="{StaticResource Text.Caption}" Margin="0,10,0,0"
-                                   Text="The Windows default input device is used. The Kinect's microphone array works, but on some Windows 11 machines its audio enhancements make the sensor reconnect repeatedly; if 'Kinect unavailable' starts appearing in the activity feed after enabling voice, switch the default microphone or disable the enhancements."/>
+                                   Text="The Windows default input device is used. Recognition runs on this PC with a closed grammar: while waiting it can only hear the word &#8220;Kinect&#8221;, and after the chime only the commands listed here - it never transcribes conversation. On some Windows 11 machines the Kinect microphone's audio enhancements make the sensor reconnect repeatedly; if &#8220;Kinect unavailable&#8221; appears in the activity feed after enabling voice, switch the default microphone or disable the enhancements."/>
                     </StackPanel>
                 </Border>
             </StackPanel>
 
-            <!-- ============================ Commands ============================ -->
+            <!-- ============================ Right column ============================ -->
             <StackPanel Grid.Column="1">
                 <Border Style="{StaticResource Card}">
                     <StackPanel>
                         <Grid Margin="0,0,0,14">
                             <StackPanel>
-                                <TextBlock Text="COMMANDS" Style="{StaticResource Text.Eyebrow}"/>
+                                <TextBlock Text="COMMANDS AFTER THE CHIME" Style="{StaticResource Text.Eyebrow}"/>
                                 <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0">
                                     <Run Text="{Binding Voice.AvailableCount, Mode=OneWay}"/><Run Text=" built in"/>
                                     <Run Text=" &#183; "/><Run Text="{Binding Voice.PlannedCount, Mode=OneWay}"/><Run Text=" planned"/>
+                                    <Run Text="  &#183;  e.g. "/><Run Text="&#8220;Kinect&#8221; &#10022; &#8220;volume seventy&#8221;" Foreground="{StaticResource Brush.Accent}"/>
                                 </TextBlock>
                             </StackPanel>
-                            <TextBlock Text="{Binding Voice.WakeWordExample}" Style="{StaticResource Text.Caption}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                         </Grid>
                         <ItemsControl ItemsSource="{Binding Voice.Groups}" ItemTemplate="{StaticResource CommandGroupTemplate}"/>
+                        <TextBlock Style="{StaticResource Text.Caption}"
+                                   Text="Matching is exact: a phrase must be one of these, said on its own. Volume takes any whole number from zero to one hundred (&#8220;volume thirty seven&#8221;, &#8220;set volume to fifty percent&#8221;); anything above one hundred is refused, never rounded. Play and pause both press the media play/pause key."/>
                     </StackPanel>
                 </Border>
 
@@ -191,20 +292,20 @@
                                 </Border>
                             </Grid>
                             <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,0"
-                                       Text="Your own phrases bound to any catalog action, including Launch app with a target. Stored locally next to your profiles; the command model already carries a Custom source for them."/>
+                                       Text="Your own phrases bound to any catalog action, including Launch app with a target. They will join the same after-the-chime grammar and parser, so the wake gate protects them too."/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource CardAccent}" Margin="8,0">
                         <StackPanel>
                             <local:IconView Icon="{StaticResource IconAi}" Size="18" HorizontalAlignment="Left" Foreground="{StaticResource Brush.Accent}" Margin="0,0,0,10"/>
                             <Grid>
-                                <TextBlock Text="Assistant-routed" Style="{StaticResource Text.CardTitle}"/>
+                                <TextBlock Text="Assistant fallback" Style="{StaticResource Text.CardTitle}"/>
                                 <Border Style="{StaticResource Pill}" HorizontalAlignment="Right" Padding="8,2">
                                     <TextBlock Style="{StaticResource Pill.Text}" FontSize="10.5" Text="Planned"/>
                                 </Border>
                             </Grid>
                             <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,0"
-                                       Text="Anything the fixed grammar does not recognize can be handed to the assistant, which picks actions from the same catalog. See the AI section."/>
+                                       Text="A phrase the deterministic parser refuses could be handed to the assistant - still inside the same wake session, still one action, still only from the catalog. See the AI section."/>
                         </StackPanel>
                     </Border>
                 </UniformGrid>

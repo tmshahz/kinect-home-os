@@ -40,6 +40,42 @@
     <local:ControlStateToBrushConverter x:Key="StateGlow"
         Off="{x:Null}" Standby="{x:Null}" Ready="{StaticResource Effect.AccentGlow}" Active="{StaticResource Effect.SuccessGlow}"/>
 
+    <local:VoiceStateToValueConverter x:Key="VoiceBrush"
+        Hidden="{StaticResource Brush.TextMuted}" Wake="{StaticResource Brush.Accent}" Listening="{StaticResource Brush.Accent}"
+        Executed="{StaticResource Brush.Success}" Rejected="{StaticResource Brush.Warning}"/>
+    <local:VoiceStateToValueConverter x:Key="VoiceSoftBrush"
+        Hidden="{StaticResource Brush.NeutralSoft}" Wake="{StaticResource Brush.AccentSoft}" Listening="{StaticResource Brush.AccentSoft}"
+        Executed="{StaticResource Brush.SuccessSoft}" Rejected="{StaticResource Brush.WarningSoft}"/>
+    <local:VoiceStateToValueConverter x:Key="VoiceGlow"
+        Hidden="{x:Null}" Wake="{StaticResource Effect.AccentGlow}" Listening="{StaticResource Effect.AccentGlow}"
+        Executed="{StaticResource Effect.SuccessGlow}" Rejected="{x:Null}"/>
+
+    <!-- A dot that breathes while the command window is open. -->
+    <Style x:Key="VoicePulseDot" TargetType="Ellipse">
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <ScaleTransform ScaleX="1" ScaleY="1"/>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding Voice.IsAwaitingCommand}" Value="True">
+                <DataTrigger.EnterActions>
+                    <BeginStoryboard x:Name="VoiceDotBreath">
+                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.35" Duration="0:0:0.55"/>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" From="1" To="0.75" Duration="0:0:0.55"/>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" From="1" To="0.75" Duration="0:0:0.55"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </DataTrigger.EnterActions>
+                <DataTrigger.ExitActions>
+                    <StopStoryboard BeginStoryboardName="VoiceDotBreath"/>
+                </DataTrigger.ExitActions>
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
     <local:ActivityKindToBrushConverter x:Key="KindBrush"
         Action="{StaticResource Brush.Accent}" Control="{StaticResource Brush.Success}"
         Tracking="{StaticResource Brush.TextDim}" Sensor="{StaticResource Brush.Warning}"

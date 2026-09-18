@@ -74,7 +74,7 @@ namespace KinectV2MouseControl
 
                 if (!string.IsNullOrEmpty(VoiceTrigger))
                 {
-                    parts.Add("Voice: “" + VoiceTrigger + "”");
+                    parts.Add("Voice: “Kinect” ✦ “" + VoiceTrigger + "”");
                 }
 
                 if (parts.Count == 0)
@@ -136,9 +136,12 @@ namespace KinectV2MouseControl
             Routed("playpause", "Play / pause", "Media play-pause key.", ActionCategory.Media, ControlActionType.PlayPause, null, "play / pause"),
             Routed("nexttrack", "Next track", "Media next-track key.", ActionCategory.Media, ControlActionType.NextTrack, null, "next track"),
             Routed("prevtrack", "Previous track", "Media previous-track key.", ActionCategory.Media, ControlActionType.PreviousTrack, null, "previous track"),
-            Routed("volumeup", "Volume up", "System volume up two steps.", ActionCategory.Media, ControlActionType.VolumeUp, null, "volume up"),
-            Routed("volumedown", "Volume down", "System volume down two steps.", ActionCategory.Media, ControlActionType.VolumeDown, null, "volume down"),
-            Routed("mute", "Mute", "Toggles system mute.", ActionCategory.Media, ControlActionType.VolumeMute, null, "mute"),
+            SetVolume("setvolume", "Set volume", "Sets the Windows master volume to an exact level, 0-100%. Unmutes when the level is above zero.",
+                "volume 0–100"),
+            Routed("volumeup", "Volume up", "System volume up 10% (five media-key steps, with the Windows volume overlay).", ActionCategory.Media, ControlActionType.VolumeUp, null, "volume up"),
+            Routed("volumedown", "Volume down", "System volume down 10%.", ActionCategory.Media, ControlActionType.VolumeDown, null, "volume down"),
+            Routed("mute", "Mute", "Mutes the speakers (explicit, not a toggle).", ActionCategory.Media, ControlActionType.Mute, null, "mute"),
+            Routed("unmute", "Unmute", "Unmutes the speakers.", ActionCategory.Media, ControlActionType.Unmute, null, "unmute"),
 
             // ---- System ------------------------------------------------------------------
             Routed("togglecontrol", "Toggle Kinect control", "Switches gesture control off or on. Tracking keeps running while off.",
@@ -184,7 +187,7 @@ namespace KinectV2MouseControl
                 case ActionCategory.Pointer: return "Owned by the right hand. Pointer movement bypasses the router on purpose.";
                 case ActionCategory.Windows: return "Switching between what is open.";
                 case ActionCategory.WindowManagement: return "Acts on whichever window is in the foreground.";
-                case ActionCategory.Media: return "Standard media keys, routed by Windows to the active player.";
+                case ActionCategory.Media: return "Media keys for the active player; exact volume and mute through Windows Core Audio.";
                 case ActionCategory.System: return "Actions on KINECT-OS itself.";
                 case ActionCategory.Apps: return "Starting things.";
                 case ActionCategory.Intelligence: return "Reserved for the assistant layer.";
@@ -218,6 +221,14 @@ namespace KinectV2MouseControl
             d.CanRunFromUi = canRun;
             d.GestureTrigger = gesture;
             d.VoiceTrigger = voice;
+            return d;
+        }
+
+        private static ActionDescriptor SetVolume(string id, string name, string description, string voice)
+        {
+            // Needs a level, which a Run button cannot supply; voice is the way in.
+            ActionDescriptor d = Gesture(id, name, description, ActionCategory.Media, ControlActionType.SetVolume, null, voice, false);
+            d.Action = ControlAction.SetVolumeTo(50);
             return d;
         }
 

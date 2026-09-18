@@ -92,8 +92,14 @@
     <Setting Name="VoiceEnabled" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
-    <Setting Name="VoiceWakeWord" Type="System.String" Scope="User">
-      <Value Profile="(Default)">Kinect</Value>
+    <Setting Name="VoiceWakeThreshold" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.8</Value>
+    </Setting>
+    <Setting Name="VoiceCommandThreshold" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.7</Value>
+    </Setting>
+    <Setting Name="VoiceDismissSound" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
     </Setting>
   </Settings>
 </SettingsFile>
