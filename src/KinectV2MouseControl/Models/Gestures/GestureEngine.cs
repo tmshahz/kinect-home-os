@@ -4,31 +4,25 @@ namespace KinectV2MouseControl
     /// Runs the gesture recognizers and arbitrates between them.
     ///
     /// The engine is the only place that decides who may act on a given frame, which is what
-    /// keeps the recognizers themselves free of cross-gesture conditionals. Priority, highest
-    /// first:
+    /// keeps the recognizers themselves free of cross-gesture conditionals. Hand roles are
+    /// fixed: the right hand points, clicks, drags and right clicks; the left hand only ever
+    /// scrolls and swipes, and only while its fist clutch is engaged. Priority, highest first:
     ///
     ///  0. Double clap. Sits above everything, including the control gate, because it is what
     ///     turns control back on - it cannot be subject to the switch it operates. It needs
-    ///     neither a controlling hand nor an activation zone, only a tracked body.
-    ///  1. Disengagement. Control switched off, no tracked body, or no controlling hand, means
-    ///     IDLE: every other recognizer is reset and nothing is emitted. Checked before the
-    ///     rest, so a gesture can never outlive the session that started it.
-    ///  2. Grip on the controlling hand (drag). Owned by KinectCursor because it is welded to
-    ///     the stage 4 click anchoring, and surfaced here as GestureContext.IsDragActive. While
-    ///     a drag is live it owns the pointer hand and the lasso stands down.
-    ///  3. Lasso on the controlling hand. Right click. Mutually exclusive with grip by
-    ///     construction - HandState is one value, so Closed and Lasso cannot co-occur - and
-    ///     explicitly suppressed during a drag in case a debouncer is mid-transition.
-    ///  4. Swipe with the second hand. Evaluated before scroll, because a swipe is the more
-    ///     specific claim on the same hand: it demands speed and horizontal tidiness, whereas
-    ///     scroll accepts any sustained vertical offset. Suppressed while a drag is live.
-    ///  5. Scroll with the second hand. Suppressed for the duration of the swipe cooldown, so
-    ///     returning the hand after a swipe neither scrolls nor swipes back.
-    ///
-    /// The two hands therefore have disjoint jobs: the controlling hand does pointing, clicking
-    /// and right-clicking; the second hand does scrolling and swiping. Neither can take the
-    /// other's role while a session is live, and the second hand can never steal pointer
-    /// control because KinectCursor latches the controlling hand for the whole session.
+    ///     neither a pointer session nor an activation zone, only a tracked body.
+    ///  1. Disengagement. Control switched off, no tracked body, or no active pointer session,
+    ///     means IDLE: every other recognizer and the clutch are reset and nothing is emitted.
+    ///  2. Grip on the right hand (drag). Owned by KinectCursor because it is welded to the
+    ///     click anchoring, and surfaced here as GestureContext.IsDragActive. While a drag is
+    ///     live the lasso stands down.
+    ///  3. Lasso on the right hand. Right click.
+    ///  4. Left-fist clutch. Decides SecondaryGestureArmed. Releasing it resets the swipe
+    ///     history, the scroll engagement and neutral, and any part-accumulated scroll.
+    ///  5. Swipe with the clutched left hand. Evaluated before scroll, because a swipe is the
+    ///     more specific claim on the same hand. Suppressed while a drag is live.
+    ///  6. Scroll with the clutched left hand. Suppressed for the duration of the swipe
+    ///     cooldown, so a swipe takes priority and its return stroke does nothing.
     /// </summary>
     public class GestureEngine
     {
@@ -38,6 +32,7 @@ namespace KinectV2MouseControl
         private readonly ScrollRecognizer scroll;
         private readonly SwipeRecognizer swipe;
         private readonly ClapRecognizer clap;
+        private readonly SecondaryClutch clutch;
 
         /// <summary>
         /// Everything reset by Reset. Includes the clap: a half-finished double clap must not
@@ -66,11 +61,61 @@ namespace KinectV2MouseControl
             }
         }
 
+        public double ScrollRate
+        {
+            get
+            {
+                return scroll.CurrentRate;
+            }
+        }
+
         public string ClapStateText
         {
             get
             {
                 return clap.StateText;
+            }
+        }
+
+        public string ClutchStateText
+        {
+            get
+            {
+                return clutch.StateText;
+            }
+        }
+
+        public bool IsSecondaryGestureArmed
+        {
+            get
+            {
+                return clutch.IsArmed;
+            }
+        }
+
+        /// <summary>
+        /// What the clutched left hand is doing, for the diagnostics readout.
+        /// </summary>
+        public string SecondaryModeText
+        {
+            get
+            {
+                if (swipe.IsInCooldown)
+                {
+                    return "Swipe (cooldown)";
+                }
+
+                if (!clutch.IsArmed)
+                {
+                    return "None";
+                }
+
+                if (scroll.IsEngaged)
+                {
+                    return "Scroll";
+                }
+
+                return scroll.IsSettling ? "Scroll (settling)" : "Armed";
             }
         }
 
@@ -87,6 +132,7 @@ namespace KinectV2MouseControl
             scroll = new ScrollRecognizer(tuning);
             swipe = new SwipeRecognizer(tuning);
             clap = new ClapRecognizer(tuning);
+            clutch = new SecondaryClutch(tuning);
 
             // Registration order is documentation only; arbitration is explicit in Update.
             recognizers = new IGestureRecognizer[] { clap, lasso, swipe, scroll };
@@ -124,7 +170,6 @@ namespace KinectV2MouseControl
             if (!context.IsBodyTracked || context.ControllingHandIndex == GestureContext.NoHand)
             {
                 ResetControlSession();
-                router.ResetScrollAccumulation();
                 State = GestureState.Idle;
                 ActiveGestureName = "None";
                 return;
@@ -139,19 +184,38 @@ namespace KinectV2MouseControl
                 return;
             }
 
-            // 3. Controlling hand: right click. Stands down on its own while dragging.
+            // 3. Right hand: right click. Stands down on its own while dragging.
             lasso.Update(context, router);
+
+            // 4. Left-fist clutch. Only a left hand inside the activation zone may engage it.
+            HandSnapshot secondary = context.Hands[GestureContext.SecondaryHand];
+            bool wasArmed = clutch.IsArmed;
+            clutch.Update(secondary, secondary.IsActivated, context.DeltaTime);
+            context.IsSecondaryGestureArmed = clutch.IsArmed;
+
+            if (wasArmed != clutch.IsArmed)
+            {
+                if (!clutch.IsArmed)
+                {
+                    // Releasing the fist ends the secondary gesture outright. The recognizers
+                    // reset themselves on seeing the clutch drop; the router's part-notch is
+                    // cleared here so it cannot leak into the next engagement.
+                    router.ResetScrollAccumulation();
+                }
+
+                RuntimeLog.Write(clutch.IsArmed ? "Left clutch armed" : "Left clutch released");
+            }
 
             // A clap in progress owns both hands outright.
             bool clapOwnsSecondHand = clap.IsSuppressingSecondHand;
 
-            // 4. Second hand: swipe is the more specific claim, so it runs first. Held off
-            // during a drag, where switching windows could drop whatever is being dragged onto
-            // the wrong one.
+            // 5. Swipe is the more specific claim on the clutched hand, so it runs first. Held
+            // off during a drag, where switching windows could drop whatever is being dragged
+            // onto the wrong one.
             context.SuppressSwipe = context.IsDragActive || clapOwnsSecondHand;
             swipe.Update(context, router);
 
-            // 5. Second hand: scroll, unless a swipe has just happened.
+            // 6. Scroll, unless a swipe has just happened.
             context.SuppressScroll = swipe.IsInCooldown || clapOwnsSecondHand;
             scroll.Update(context, router);
 
@@ -197,8 +261,8 @@ namespace KinectV2MouseControl
         }
 
         /// <summary>
-        /// Returns to idle and clears every recognizer's temporal state. Called on tracking
-        /// loss, controlling-hand changes, disengagement and disable/re-enable.
+        /// Returns to idle and clears every recognizer's temporal state and the clutch. Called
+        /// on tracking loss, disengagement, disable/re-enable and settings changes.
         /// </summary>
         public void Reset()
         {
@@ -207,24 +271,24 @@ namespace KinectV2MouseControl
                 recognizers[i].Reset();
             }
 
+            clutch.Reset();
             router.ResetScrollAccumulation();
             State = GestureState.Idle;
             ActiveGestureName = "None";
         }
 
         /// <summary>
-        /// Clears the recognizers that belong to a control session, leaving the clap alone.
-        ///
-        /// Used on the per-frame idle paths, where the clap must keep watching so control can
-        /// be switched back on, and when the controlling hand changes - bringing the hands
-        /// together to clap can itself shuffle which hand is in charge, and a full reset there
-        /// would discard the half-finished double clap every time.
+        /// Clears the recognizers that belong to a pointer session, and the clutch, leaving the
+        /// clap alone so a half-finished double clap survives the pointer session starting or
+        /// ending (raising and lowering the hands to clap can do exactly that).
         /// </summary>
         public void ResetControlSession()
         {
             lasso.Reset();
             swipe.Reset();
             scroll.Reset();
+            clutch.Reset();
+            router.ResetScrollAccumulation();
         }
     }
 }

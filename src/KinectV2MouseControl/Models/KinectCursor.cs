@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
@@ -12,6 +12,7 @@ namespace KinectV2MouseControl
         private KinectReader sensorReader;
         private CursorMapper cursorMapper;
         private CursorOutputLoop outputLoop;
+        private DesktopLayout desktop;
 
         private readonly StationaryLock stationaryLock = new StationaryLock();
         private readonly PointerCalibration calibration = new PointerCalibration();
@@ -20,9 +21,17 @@ namespace KinectV2MouseControl
         private readonly ActionRouter actionRouter = new ActionRouter();
         private readonly GestureContext gestureContext = new GestureContext();
         private readonly GestureEngine gestureEngine;
+        private readonly PointerStabilizer stabilizer;
 
         /// <summary>
-        /// Live view of what the gesture layer is seeing. Read by the settings window.
+        /// Fixed hand roles. The right hand is the only hand that can own the pointer; the left
+        /// hand never can, whatever the right hand is doing. See GestureContext.PointerHand.
+        /// </summary>
+        private const int PointerHand = GestureContext.PointerHand;
+        private const int SecondaryHand = GestureContext.SecondaryHand;
+
+        /// <summary>
+        /// Live view of what the control engine is seeing. Read by the settings window.
         /// </summary>
         public GestureDiagnostics Diagnostics { get; private set; }
 
@@ -51,6 +60,13 @@ namespace KinectV2MouseControl
             }
             set
             {
+                RuntimeLog.Write("Mode -> " + value);
+                if (value != _mode)
+                {
+                    ActivityLog.Post(ActivityKind.Control, "Control mode: " + DescribeMode(value),
+                        value == ControlMode.Disabled ? "Sensor switched off" : "Sensor on, tracking", "control center");
+                }
+
                 _mode = value;
                 if (value == ControlMode.Disabled)
                 {
@@ -58,6 +74,7 @@ namespace KinectV2MouseControl
                     // Releasing before anything else: disabling while a fist is closed must
                     // never leave the mouse button held down.
                     ReleaseAllGrips();
+                    calibration.CancelCapture();
                     ResetControlState();
                     safetyTimer.Stop();
                     UpdateOutputLoopState();
@@ -71,6 +88,10 @@ namespace KinectV2MouseControl
                     controlEnabled = true;
                     calibration.CancelCapture();
 
+                    ToggleHoverTimer(false);
+                    // Switching between two active modes can happen mid-drag; release first,
+                    // like every other teardown path, rather than waiting for the next frame.
+                    ReleaseAllGrips();
                     ResetControlState();
                     UpdateOutputLoopState();
                     safetyTimer.Start();
@@ -102,16 +123,100 @@ namespace KinectV2MouseControl
 
         public void ToggleControl()
         {
-            SetControlEnabled(!controlEnabled);
+            SetControlEnabled(!controlEnabled, "double clap");
         }
 
-        private void SetControlEnabled(bool enabled)
+        /// <summary>
+        /// Human-readable control mode, shared by the activity feed and the control center.
+        /// </summary>
+        public static string DescribeMode(ControlMode mode)
+        {
+            switch (mode)
+            {
+                case ControlMode.Disabled: return "Disabled";
+                case ControlMode.MoveOnly: return "Move only";
+                case ControlMode.GripToPress: return "Grip to press";
+                case ControlMode.HoverToClick: return "Hover to click";
+                case ControlMode.MoveGripPressing: return "Move + grip pressing";
+                case ControlMode.MoveLiftClicking: return "Move + lift clicking";
+                default: return mode.ToString();
+            }
+        }
+
+        /// <summary>
+        /// The router (IActionSink) for inputs other than gestures: voice commands and the
+        /// control center's Actions page execute through it, on the UI thread.
+        /// </summary>
+        public ActionRouter Actions
+        {
+            get
+            {
+                return actionRouter;
+            }
+        }
+
+        /// <summary>
+        /// Current desktop geometry, for the Displays page.
+        /// </summary>
+        public DesktopLayout Desktop
+        {
+            get
+            {
+                return desktop;
+            }
+        }
+
+        public bool IsSensorOpen
+        {
+            get
+            {
+                return sensorReader.IsSensorOpen;
+            }
+        }
+
+        /// <summary>
+        /// The right-hand region, in raw body-relative metres (SpineBase origin, Y up), that
+        /// currently maps onto the whole virtual desktop. Purely descriptive - the control
+        /// center draws it so the user can see where the reach limits sit - and derived from
+        /// the same mapper state the pointer path uses, so it can never disagree with it.
+        /// </summary>
+        public MRect GetPointerReachRect()
+        {
+            MVector2 scale = cursorMapper.TotalScale;
+            double halfWidth = scale.X == 0 ? 0 : Math.Abs(desktop.Bounds.DeltaX * 0.5 / scale.X);
+            double halfHeight = scale.Y == 0 ? 0 : Math.Abs(desktop.Bounds.DeltaY * 0.5 / scale.Y);
+
+            // The mapping frame is offset sideways per hand and vertically by the pointer
+            // height (see KinectBodyHelper.GetHandRelativePosition); undo both.
+            MVector2 centre = cursorMapper.InputRect.Center;
+            double centreX = centre.X + KinectBodyHelper.GESTURE_X_OFFSET;
+            double centreY = centre.Y + tuning.PointerCenterHeight;
+
+            return new MRect(centreX - halfWidth, centreY + halfHeight, centreX + halfWidth, centreY - halfHeight);
+        }
+
+        public bool IsSensorAvailable
+        {
+            get
+            {
+                return sensorReader.IsSensorAvailable;
+            }
+        }
+
+        /// <summary>
+        /// Switches the control gate. <paramref name="source"/> is who asked - "double clap",
+        /// "voice", "control center" - and only feeds the log and the activity feed.
+        /// </summary>
+        public void SetControlEnabled(bool enabled, string source)
         {
             if (controlEnabled == enabled)
             {
                 return;
             }
 
+            RuntimeLog.Write("Control " + (enabled ? "ENABLED" : "DISABLED") + " by " + source);
+            ActivityLog.Post(ActivityKind.Control, enabled ? "Kinect control on" : "Kinect control off",
+                "By " + source, source);
             controlEnabled = enabled;
 
             ToggleHoverTimer(false);
@@ -153,6 +258,26 @@ namespace KinectV2MouseControl
             }
         }
 
+        /// <summary>
+        /// Applies a batch of settings changes - a profile load, Reset to defaults - safely.
+        /// Buttons are released first, any calibration capture is abandoned, and afterwards
+        /// every piece of derived state (filters, lock, mapping, activation latches, gestures,
+        /// pointer session) is rebuilt, so the next session starts cleanly under the new values.
+        /// </summary>
+        public void ApplySettings(Action apply)
+        {
+            ToggleHoverTimer(false);
+            ReleaseAllGrips();
+            calibration.CancelCapture();
+
+            apply();
+
+            ReleaseAllGrips();
+            ResetControlState();
+            ApplyInputMapping();
+            UpdateOutputLoopState();
+        }
+
         public double Smoothing
         {
             get
@@ -181,7 +306,7 @@ namespace KinectV2MouseControl
         }
 
         /// <summary>
-        /// Radius in screen pixels the filtered position must leave before the cursor moves.
+        /// Radius in screen pixels of the (continuous) jitter dead zone.
         /// </summary>
         public double JitterDeadzone
         {
@@ -226,8 +351,11 @@ namespace KinectV2MouseControl
         ///
         /// Calibrated mode uses ScaleAlignment.Both so the axes scale independently, which is
         /// the whole point: on a dual-monitor desktop a single uniform scale either makes
-        /// horizontal reach impossible or vertical aim hopelessly twitchy. Uncalibrated keeps
-        /// the original rect and LongerRange alignment untouched.
+        /// horizontal reach impossible or vertical aim hopelessly twitchy. In calibrated mode
+        /// the rectangle alone sets the scale, so Movement Scale is not applied; otherwise a
+        /// Movement Scale below 1 would silently put the desktop edges beyond the calibrated
+        /// reach. Uncalibrated keeps the original rect, LongerRange alignment and Movement Scale
+        /// untouched.
         /// </summary>
         private void ApplyInputMapping()
         {
@@ -235,11 +363,13 @@ namespace KinectV2MouseControl
             {
                 cursorMapper.ScaleAlign = CursorMapper.ScaleAlignment.Both;
                 cursorMapper.InputRect = calibration.BuildInputRect();
+                cursorMapper.MoveScale = 1;
             }
             else
             {
                 cursorMapper.ScaleAlign = CursorMapper.ScaleAlignment.LongerRange;
                 cursorMapper.InputRect = gestureRect;
+                cursorMapper.MoveScale = moveScale;
             }
 
             cursorMapper.ResetSmoothing();
@@ -249,64 +379,103 @@ namespace KinectV2MouseControl
         }
 
         /// <summary>
-        /// Starts recording the extents of the controlling hand. Cursor output and actions are
-        /// held off while capturing, so sweeping out the comfortable rectangle does not fling
-        /// the pointer around or click on anything.
+        /// Starts the guided five-point calibration. Cursor output and actions are held off
+        /// while capturing, so reaching for the extents does not fling the pointer around or
+        /// click on anything.
         /// </summary>
-        public void BeginCalibration()
+        /// <returns>False when no control mode is selected, so the sensor is closed.</returns>
+        public bool BeginCalibration()
         {
+            if (_mode == ControlMode.Disabled)
+            {
+                return false;
+            }
+
+            ToggleHoverTimer(false);
             ReleaseAllGrips();
             ResetControlState();
             calibration.BeginCapture();
             UpdateOutputLoopState();
             UpdateCalibrationDiagnostics();
+            RuntimeLog.Write("Calibration started");
+            ActivityLog.Post(ActivityKind.Calibration, "Calibration started", "Guided 5-point capture with the right hand", "control center");
+            return true;
+        }
+
+        public void CancelCalibration()
+        {
+            bool wasCapturing = calibration.IsCapturing;
+            calibration.CancelCapture();
+            ResetControlState();
+            UpdateOutputLoopState();
+            UpdateCalibrationDiagnostics();
+            RuntimeLog.Write("Calibration cancelled");
+            if (wasCapturing)
+            {
+                ActivityLog.Post(ActivityKind.Calibration, "Calibration cancelled", "Previous mapping kept", "control center");
+            }
         }
 
         /// <summary>
-        /// Ends recording and adopts the swept rectangle.
+        /// Adopts a completed capture. Runs from the frame handler on the frame the last point
+        /// is captured.
         /// </summary>
-        /// <returns>True when the sweep was large enough to use.</returns>
-        public bool EndCalibration()
+        private void FinishCalibration()
         {
             double heightAdjustment;
             bool accepted = calibration.EndCapture(out heightAdjustment);
 
             if (accepted)
             {
-                // The sweep's vertical centre belongs to PointerCenterHeight, which already owns
-                // the vertical origin, rather than being duplicated in the rectangle.
+                // The captured vertical centre belongs to PointerCenterHeight, which already
+                // owns the vertical origin, rather than being duplicated in the rectangle.
                 tuning.PointerCenterHeight += heightAdjustment;
             }
 
             ApplyInputMapping();
             ResetControlState();
             UpdateOutputLoopState();
-            return accepted;
+            CalibrationVersion++;
+            RuntimeLog.Write(calibration.LastResultText);
+            ActivityLog.Post(ActivityKind.Calibration, accepted ? "Calibration complete" : "Calibration rejected",
+                calibration.LastResultText, "sensor");
         }
 
-        public void CancelCalibration()
+        /// <summary>
+        /// Increments whenever a calibration capture finishes, so the UI knows to re-read the
+        /// ranges, the pointer height and the calibrated flag.
+        /// </summary>
+        public int CalibrationVersion { get; private set; }
+
+        /// <summary>
+        /// Current guided-calibration instruction, or the last result when idle.
+        /// </summary>
+        public string CalibrationPrompt
         {
-            calibration.CancelCapture();
-            ResetControlState();
-            UpdateOutputLoopState();
-            UpdateCalibrationDiagnostics();
+            get
+            {
+                return calibration.PromptText;
+            }
         }
 
         private void UpdateCalibrationDiagnostics()
         {
+            Diagnostics.CalibrationStep = calibration.IsCapturing ? (int)calibration.Step : 0;
+            Diagnostics.CalibrationHoldProgress = calibration.HoldProgress;
+            Diagnostics.CalibrationWaitingForHand = calibration.IsWaitingForHand;
+
             if (calibration.IsCapturing)
             {
-                Diagnostics.Calibration = "CAPTURING  swept X "
-                    + calibration.CapturedRangeX.ToString("0.00") + " Y "
-                    + calibration.CapturedRangeY.ToString("0.00") + " m";
+                Diagnostics.Calibration = "CAPTURING step " + calibration.Step;
                 return;
             }
 
             Diagnostics.Calibration = calibration.UseCalibratedRange
                 ? "On  X " + calibration.HandRangeX.ToString("0.00")
                     + " Y " + calibration.HandRangeY.ToString("0.00")
-                    + " m  centreX " + calibration.HandCenterX.ToString("0.00")
-                : "Off (uniform scale)";
+                    + " m  cX " + calibration.HandCenterX.ToString("+0.00;-0.00")
+                    + "  ptrH " + tuning.PointerCenterHeight.ToString("0.00")
+                : "Off (uniform scale x" + moveScale.ToString("0.00") + ")";
         }
 
         /// <summary>
@@ -340,7 +509,7 @@ namespace KinectV2MouseControl
         }
 
         /// <summary>
-        /// Wheel notches per second per metre of second-hand vertical offset.
+        /// Scroll rate, in wheel notches per second per metre, at the curve's reference offset.
         /// </summary>
         public double ScrollSpeed
         {
@@ -351,6 +520,48 @@ namespace KinectV2MouseControl
             set
             {
                 tuning.ScrollSpeed = value;
+            }
+        }
+
+        /// <summary>
+        /// Scroll rate curve exponent. 1 is linear.
+        /// </summary>
+        public double ScrollCurve
+        {
+            get
+            {
+                return tuning.ScrollCurve;
+            }
+            set
+            {
+                tuning.ScrollCurve = value;
+            }
+        }
+
+        public bool InvertScroll
+        {
+            get
+            {
+                return tuning.InvertScroll;
+            }
+            set
+            {
+                tuning.InvertScroll = value;
+            }
+        }
+
+        /// <summary>
+        /// Seconds of good right-hand samples before a pointer session takes the cursor.
+        /// </summary>
+        public double PointerSettleTime
+        {
+            get
+            {
+                return tuning.PointerSettleTime;
+            }
+            set
+            {
+                tuning.PointerSettleTime = value;
             }
         }
 
@@ -539,16 +750,28 @@ namespace KinectV2MouseControl
         /// Default as 20, this needs to be modified according to usual movement distance/speed in your specific case.
         /// </summary>
         public double HoverRange { get; set; } = 20;
-        
+
+        /// <summary>
+        /// The user's Movement Scale. Applied to the uncalibrated mapping only; see
+        /// ApplyInputMapping.
+        /// </summary>
+        private double moveScale = 1;
+
         public double MoveScale
         {
             get
             {
-                return cursorMapper.MoveScale;
+                return moveScale;
             }
             set
             {
-                cursorMapper.MoveScale = value;
+                moveScale = value;
+                if (!calibration.UseCalibratedRange)
+                {
+                    cursorMapper.MoveScale = value;
+                }
+
+                UpdateCalibrationDiagnostics();
             }
         }
 
@@ -599,6 +822,19 @@ namespace KinectV2MouseControl
         private bool hasFrameArrived = false;
 
         /// <summary>
+        /// Time from pointer samples skipped as glitches, carried into the next accepted
+        /// sample so the time-aware filter still sees the real elapsed time.
+        /// </summary>
+        private double skippedPointerTime;
+
+        // Frame-rate instrumentation, for diagnostics and the runtime log.
+        private double frameDeltaAverage = DEFAULT_FRAME_DELTA;
+        private double frameDeltaRecentMax;
+        private double sessionStartTime;
+        private int sessionFrames;
+        private double sessionDeltaMax;
+
+        /// <summary>
         /// Timer for hover detection.
         /// </summary>
         private DispatcherTimer hoverTimer = new DispatcherTimer();
@@ -611,20 +847,24 @@ namespace KinectV2MouseControl
         private const int NONE_USED = -1;
 
         /// <summary>
-        /// Used to keep track of the controlling hand. So when another hand lift up forward, the cursor would still follow the first controlling hand.
+        /// PointerHand while a pointer session is active (stabilized and driving the cursor),
+        /// otherwise NONE_USED. It can never hold the left hand.
         /// </summary>
         private int usedHandIndex = NONE_USED;
         private bool hoverClicked = false;
 
         public KinectCursor()
         {
-            // Physical-pixel bounds of the whole virtual desktop, which is the coordinate space
-            // SetCursorPos works in. Replaces WPF's primary-screen-only, DPI-scaled values.
-            cursorMapper = new CursorMapper(gestureRect, VirtualScreen.GetBounds(), CursorMapper.ScaleAlignment.LongerRange);
+            // Physical-pixel geometry of the whole virtual desktop, which is the coordinate
+            // space SetCursorPos works in. Replaces WPF's primary-screen-only, DPI-scaled values.
+            desktop = DesktopLayout.Capture();
+            cursorMapper = new CursorMapper(gestureRect, desktop.Bounds, CursorMapper.ScaleAlignment.LongerRange);
+            cursorMapper.Desktop = desktop;
 
             outputLoop = new CursorOutputLoop();
 
             Diagnostics = new GestureDiagnostics();
+            stabilizer = new PointerStabilizer(tuning);
             gestureEngine = new GestureEngine(tuning, actionRouter);
             actionRouter.ActionExecuted += ActionRouter_ActionExecuted;
             actionRouter.ControlGate = this;
@@ -636,6 +876,7 @@ namespace KinectV2MouseControl
 
             UpdateDesktopDiagnostics();
             UpdateCalibrationDiagnostics();
+            RuntimeLog.Write("Engine created. Desktop " + desktop.Describe());
 
             sensorReader = new KinectReader(false);
             sensorReader.OnTrackedBody += Kinect_OnTrackedBody;
@@ -669,25 +910,38 @@ namespace KinectV2MouseControl
 
         private void ApplyDisplayBounds()
         {
-            cursorMapper.OutputRect = VirtualScreen.GetBounds();
+            desktop = DesktopLayout.Capture();
+            cursorMapper.OutputRect = desktop.Bounds;
+            cursorMapper.Desktop = desktop;
 
             // The coordinate space just moved under us, so abandon any drag rather than
             // continuing it against a stale mapping.
             ReleaseAllGrips();
             ResetControlState();
             UpdateDesktopDiagnostics();
+            RuntimeLog.Write("Display settings changed. Desktop " + desktop.Describe());
+            ActivityLog.Post(ActivityKind.System, "Display layout changed", desktop.Describe(), "windows");
+
+            EventHandler handler = DesktopChanged;
+            if (handler != null)
+            {
+                handler.Invoke(this, EventArgs.Empty);
+            }
         }
+
+        /// <summary>
+        /// Raised on the UI thread after the desktop geometry has been re-captured.
+        /// </summary>
+        public event EventHandler DesktopChanged;
 
         private void UpdateDesktopDiagnostics()
         {
-            MRect bounds = cursorMapper.OutputRect;
-            Diagnostics.DesktopBounds =
-                Math.Abs(bounds.DeltaX).ToString("0") + "x" + Math.Abs(bounds.DeltaY).ToString("0")
-                + " @ (" + bounds.Left.ToString("0") + "," + bounds.Top.ToString("0") + ")";
+            Diagnostics.DesktopBounds = desktop.Describe();
         }
 
         private void Kinect_OnLostTracking(object sender, EventArgs e)
         {
+            EndSessionLog("tracking lost");
             ToggleHoverTimer(false);
             ReleaseAllGrips();
             ResetControlState();
@@ -708,6 +962,10 @@ namespace KinectV2MouseControl
 
             // Frames stopped arriving without a tracking-lost event - sensor unplugged, driver
             // reset, machine resumed. Never leave a mouse button held down because of it.
+            EndSessionLog("frame stall");
+            RuntimeLog.Write("Frame stall > " + FRAME_STALL_TIMEOUT + " s: released and reset");
+            ActivityLog.Post(ActivityKind.System, "Frame stall", "No body frames for " + FRAME_STALL_TIMEOUT + " s - buttons released, session reset", "watchdog");
+            ToggleHoverTimer(false);
             ReleaseAllGrips();
             ResetControlState();
             SetDiagnosticsIdle(false);
@@ -726,18 +984,20 @@ namespace KinectV2MouseControl
             hasFrameArrived = true;
 
             double deltaTime = GetDeltaTime(e.RelativeTime);
+            UpdateFrameStatistics(deltaTime);
 
             // Normalize the body into the gesture context first, so both the pointer path below
             // and the recognizers afterwards read exactly the same view of this frame.
             BuildHandSnapshots(body, deltaTime);
 
-            // Control switched off, or a calibration sweep in progress: the body is still being
-            // tracked and the clap recognizer still runs, but nothing may touch the machine.
+            // Control switched off, or a calibration capture in progress: the body is still
+            // being tracked and the clap recognizer still runs, but nothing may touch the
+            // machine.
             if (!controlEnabled || calibration.IsCapturing)
             {
                 if (calibration.IsCapturing)
                 {
-                    RecordCalibrationSample(body);
+                    RecordCalibrationSample(body, deltaTime);
                 }
 
                 RunGestureLayer();
@@ -745,124 +1005,157 @@ namespace KinectV2MouseControl
                 return;
             }
 
-            for(int i = 1; i >= 0; i--) // Starts looking from right hand.
-            {
-                bool isLeft = (i == 0);
-                if (gestureContext.Hands[i].IsActivated)
-                {
-                    if (usedHandIndex == NONE_USED)
-                    {
-                        usedHandIndex = i;
-                        BeginControlSession();
-                    } else if (usedHandIndex != i)
-                    {
-                        // In two-hand control mode, non-used hand would be used for pressing/releasing mouse button.
-                        if (Mode == ControlMode.MoveGripPressing)
-                        {
-                            DoMouseControlByHandState(i, gestureContext.Hands[i], deltaTime);
-                        } 
-
-                        continue;
-                    }
-
-                    // Grip is resolved before the cursor target so that a fist which has just
-                    // started closing can pin the cursor on this same frame, rather than a
-                    // frame later once the press is confirmed.
-                    if (Mode == ControlMode.GripToPress)
-                    {
-                        DoMouseControlByHandState(i, gestureContext.Hands[i], deltaTime);
-                    }
-
-                    double positionWeight = gestureContext.Hands[i].PositionWeight;
-                    if (positionWeight > 0)
-                    {
-                        MVector2 handPos = body.GetHandRelativePosition(isLeft, tuning.PointerCenterHeight);
-                        MVector2 filteredTarget = cursorMapper.GetSmoothedOutputPosition(handPos, deltaTime, positionWeight);
-
-                        // Stationary lock sits between the filter chain and the click anchor.
-                        // It is stood down whenever a button is held, so it can never fight a
-                        // deliberate drag; during a drag the stage 4 click anchor is already
-                        // providing the stability.
-                        filteredTarget = stationaryLock.Apply(filteredTarget, deltaTime, !IsAnyGripHeld());
-
-                        PublishCursorTarget(filteredTarget, deltaTime, ShouldHoldCursorAnchor(i));
-                    }
-
-                    if (Mode == ControlMode.HoverToClick)
-                    {
-                        if (hasLastCursorPos && (latestTarget - lastCursorPos).Length() > HoverRange)
-                        {
-                            ToggleHoverTimer(false);
-                            hoverClicked = false;
-                        }
-
-                        lastCursorPos = latestTarget;
-                        hasLastCursorPos = true;
-                    }
-                }
-                else
-                {
-                    if(usedHandIndex == i)
-                    {
-                        // Reset to none.
-                        usedHandIndex = NONE_USED;
-                        ReleaseGrip(i);
-                        EndControlSession();
-                    }
-                    else  if (Mode == ControlMode.MoveLiftClicking)
-                    {
-                        if (gestureContext.Hands[i].PositionWeight > 0)
-                        {
-                            DoMouseClickByHandLifting(i, body.GetHandRelativePosition(isLeft, tuning.PointerCenterHeight));
-                        }
-                        else
-                        {
-                            ReleaseGrip(i);
-                        }
-                    }
-                    else // Release mouse button when it's not regularly released, such as hand tracking lost.
-                    {
-                        ReleaseGrip(i);
-                    }
-                    
-                }
-                
-            }
+            UpdatePointerHand(body, deltaTime);
+            UpdateSecondaryHandClicking(body, deltaTime);
 
             ToggleHoverTimer(Mode == ControlMode.HoverToClick && usedHandIndex != NONE_USED);
 
-            // The controlling hand is only known once the loop above has run, so the gesture
-            // layer is driven here, after the pointer path has had its turn.
+            // The pointer session state is only known once the pointer path has run, so the
+            // gesture layer is driven here, after it.
             RunGestureLayer();
 
             UpdateDiagnostics();
         }
 
+        /// <summary>
+        /// The right hand's whole pointer path: session start (via the stabilizer), grip, the
+        /// filter chain and publishing the target. The left hand never enters here.
+        /// </summary>
+        private void UpdatePointerHand(Body body, double deltaTime)
+        {
+            HandSnapshot hand = gestureContext.Hands[PointerHand];
+
+            if (!hand.IsActivated)
+            {
+                // Right hand down or gone: pointer control goes idle. There is no fallback to
+                // the left hand.
+                if (usedHandIndex != NONE_USED)
+                {
+                    EndPointerSession("right hand left the zone");
+                }
+                else
+                {
+                    stabilizer.Reset();
+                    ReleaseGrip(PointerHand);
+                }
+
+                return;
+            }
+
+            MVector2 handPos = body.GetHandRelativePosition(false, tuning.PointerCenterHeight);
+
+            if (usedHandIndex == NONE_USED)
+            {
+                bool isGoodSample = hand.JointState == TrackingState.Tracked && hand.PositionWeight > 0;
+                if (!stabilizer.Stabilize(handPos, isGoodSample, deltaTime))
+                {
+                    return;
+                }
+
+                usedHandIndex = PointerHand;
+                BeginControlSession(stabilizer.SeedPosition);
+            }
+
+            // Grip is resolved before the cursor target so that a fist which has just started
+            // closing can pin the cursor on this same frame, rather than a frame later once the
+            // press is confirmed.
+            if (Mode == ControlMode.GripToPress)
+            {
+                DoMouseControlByHandState(PointerHand, hand, deltaTime);
+            }
+
+            PointerStabilizer.Verdict verdict = stabilizer.CheckActiveSample(handPos, deltaTime + skippedPointerTime);
+            if (verdict == PointerStabilizer.Verdict.Destabilize)
+            {
+                EndPointerSession("repeated tracking glitches");
+                return;
+            }
+
+            if (verdict == PointerStabilizer.Verdict.SkipGlitch)
+            {
+                // One implausible jump: hold the previous target rather than filtering it in.
+                skippedPointerTime += deltaTime;
+                return;
+            }
+
+            double filterDelta = deltaTime + skippedPointerTime;
+            skippedPointerTime = 0;
+
+            MVector2 filteredTarget = cursorMapper.GetSmoothedOutputPosition(handPos, filterDelta, hand.PositionWeight);
+
+            // Stationary lock sits between the filter chain and the click anchor. It is stood
+            // down whenever a button is held, so it can never fight a deliberate drag; during a
+            // drag the click anchor is already providing the stability.
+            filteredTarget = stationaryLock.Apply(filteredTarget, filterDelta, !IsAnyGripHeld());
+
+            PublishCursorTarget(filteredTarget, filterDelta, ShouldHoldCursorAnchor(PointerHand));
+
+            if (Mode == ControlMode.HoverToClick)
+            {
+                if (hasLastCursorPos && (latestTarget - lastCursorPos).Length() > HoverRange)
+                {
+                    ToggleHoverTimer(false);
+                    hoverClicked = false;
+                }
+
+                lastCursorPos = latestTarget;
+                hasLastCursorPos = true;
+            }
+        }
+
+        /// <summary>
+        /// The left hand's job in the two-hand clicking modes, which predate the gesture
+        /// vocabulary: in MoveGripPressing its fist holds the button, in MoveLiftClicking lifting
+        /// it clicks. Both act only while the right hand has an active pointer session. In every
+        /// other mode the left hand never touches a button.
+        /// </summary>
+        private void UpdateSecondaryHandClicking(Body body, double deltaTime)
+        {
+            HandSnapshot hand = gestureContext.Hands[SecondaryHand];
+            bool isPointerLive = usedHandIndex != NONE_USED;
+
+            if (Mode == ControlMode.MoveGripPressing && isPointerLive && hand.IsActivated)
+            {
+                DoMouseControlByHandState(SecondaryHand, hand, deltaTime);
+            }
+            else if (Mode == ControlMode.MoveLiftClicking && isPointerLive && !hand.IsActivated && hand.PositionWeight > 0)
+            {
+                DoMouseClickByHandLifting(SecondaryHand, body.GetHandRelativePosition(true, tuning.PointerCenterHeight));
+            }
+            else
+            {
+                // Release mouse button when it's not regularly released, such as hand tracking lost.
+                ReleaseGrip(SecondaryHand);
+            }
+        }
+
         private void RunGestureLayer()
         {
             gestureContext.ControllingHandIndex = usedHandIndex;
-            gestureContext.SecondHandIndex = GetSecondHandIndex();
             gestureContext.IsDragActive = IsAnyGripHeld();
             gestureContext.IsGestureVocabularyEnabled = IsGestureVocabularyEnabled();
             gestureContext.IsControlEnabled = controlEnabled && !calibration.IsCapturing;
             gestureEngine.Update(gestureContext);
         }
 
-        private void RecordCalibrationSample(Body body)
+        private void RecordCalibrationSample(Body body, double deltaTime)
         {
-            for (int i = 0; i < 2; i++)
+            HandSnapshot hand = gestureContext.Hands[PointerHand];
+
+            // Only a confidently tracked, raised right hand contributes, so the captured range
+            // is one that can actually be reached while pointing.
+            if (hand.IsActivated && hand.PositionWeight >= 1)
             {
-                bool isLeft = (i == 0);
-                HandSnapshot hand = gestureContext.Hands[i];
+                calibration.AddSample(body.GetHandRelativePosition(false, tuning.PointerCenterHeight), deltaTime);
+            }
+            else
+            {
+                calibration.NoSample();
+            }
 
-                // Only a confidently tracked, raised hand contributes, so a hand resting in the
-                // lap cannot stretch the rectangle to something unusable.
-                if (hand.PositionWeight < 1 || !hand.IsActivated)
-                {
-                    continue;
-                }
-
-                calibration.AddSample(body.GetHandRelativePosition(isLeft, tuning.PointerCenterHeight));
+            if (calibration.IsCaptureComplete)
+            {
+                FinishCalibration();
             }
 
             UpdateCalibrationDiagnostics();
@@ -887,6 +1180,7 @@ namespace KinectV2MouseControl
                 snapshot.State = body.GetHandState(isLeft);
                 snapshot.IsConfident = body.IsHandStateConfident(isLeft);
                 snapshot.PositionWeight = body.GetHandPositionWeight(isLeft);
+                snapshot.JointState = body.GetHandJointState(isLeft);
                 snapshot.IsActivated = UpdateHandActivation(i, snapshot);
 
                 gestureContext.Hands[i] = snapshot;
@@ -931,32 +1225,12 @@ namespace KinectV2MouseControl
         }
 
         /// <summary>
-        /// The activated hand that is not steering the pointer, if any. This is the hand the
-        /// scroll and swipe recognizers are allowed to use.
-        /// </summary>
-        private int GetSecondHandIndex()
-        {
-            if (usedHandIndex == NONE_USED)
-            {
-                return GestureContext.NoHand;
-            }
-
-            int otherHand = usedHandIndex == GestureContext.LeftHand
-                ? GestureContext.RightHand
-                : GestureContext.LeftHand;
-
-            return gestureContext.Hands[otherHand].IsActivated ? otherHand : GestureContext.NoHand;
-        }
-
-        /// <summary>
         /// Whether the lasso/scroll/swipe vocabulary is live.
         ///
-        /// It is confined to GripToPress: that is the one mode where the controlling hand's
-        /// hand state already drives actions and the second hand has no existing job.
-        /// MoveGripPressing and MoveLiftClicking both give the second hand to clicking, and
-        /// MoveOnly means pointer-only by definition, so switching gestures on there would
-        /// change the documented behaviour of modes that already work. Widening this is a
-        /// one-line change once the vocabulary has been tested on hardware.
+        /// It is confined to GripToPress: that is the one mode where the right hand's hand
+        /// state already drives actions and the left hand has no existing job.
+        /// MoveGripPressing and MoveLiftClicking both give the left hand to clicking, and
+        /// MoveOnly means pointer-only by definition.
         /// </summary>
         private bool IsGestureVocabularyEnabled()
         {
@@ -992,11 +1266,25 @@ namespace KinectV2MouseControl
             return deltaTime > MAX_FRAME_DELTA ? MAX_FRAME_DELTA : deltaTime;
         }
 
+        private void UpdateFrameStatistics(double deltaTime)
+        {
+            frameDeltaAverage += (deltaTime - frameDeltaAverage) * (1 - Math.Exp(-deltaTime / 1.0));
+
+            // A decaying peak: shows a recent hitch for a couple of seconds, then fades.
+            frameDeltaRecentMax = Math.Max(deltaTime, frameDeltaRecentMax * Math.Exp(-deltaTime / 2.0));
+
+            if (usedHandIndex != NONE_USED)
+            {
+                sessionFrames++;
+                sessionDeltaMax = Math.Max(sessionDeltaMax, deltaTime);
+            }
+        }
+
         /// <summary>
-        /// Whether the controlling hand currently wants the cursor pinned: either a press is
-        /// being confirmed, or one was just confirmed and is still inside its freeze window.
-        /// Only the hand steering the cursor can pin it - in the two-hand modes the clicking
-        /// hand is a different hand and cannot disturb the pointer.
+        /// Whether the right hand currently wants the cursor pinned: either a press is being
+        /// confirmed, or one was just confirmed and is still inside its freeze window. Only the
+        /// pointer hand can pin it - in the two-hand modes the clicking hand is the left hand
+        /// and cannot disturb the pointer.
         /// </summary>
         private bool ShouldHoldCursorAnchor(int handIndex)
         {
@@ -1055,45 +1343,16 @@ namespace KinectV2MouseControl
 
         private void SetCursorTarget(MVector2 target)
         {
+            // Keep the target on a real monitor. The mapped position is already clamped before
+            // filtering; this catches the click anchor offset pushing it off again.
+            target = desktop.Clamp(target);
             latestTarget = target;
             hasLatestTarget = true;
-            outputLoop.SetTarget(ClampToOutputRect(target));
-        }
+            outputLoop.SetTarget(target);
 
-        /// <summary>
-        /// Keeps the target on the desktop. With a MoveScale above 1 the mapped position runs
-        /// well past the screen edges, and letting the filter chase a far-off target would make
-        /// the cursor sluggish to come back.
-        /// </summary>
-        private MVector2 ClampToOutputRect(MVector2 target)
-        {
-            MRect rect = cursorMapper.OutputRect;
-
-            double left = Math.Min(rect.Left, rect.Right);
-            double top = Math.Min(rect.Top, rect.Bottom);
-            // Right/Bottom are exclusive, so the last addressable pixel is one inside.
-            double right = Math.Max(rect.Left, rect.Right) - 1;
-            double bottom = Math.Max(rect.Top, rect.Bottom) - 1;
-
-            if (target.X < left)
-            {
-                target.X = left;
-            }
-            else if (target.X > right)
-            {
-                target.X = right;
-            }
-
-            if (target.Y < top)
-            {
-                target.Y = top;
-            }
-            else if (target.Y > bottom)
-            {
-                target.Y = bottom;
-            }
-
-            return target;
+            Diagnostics.CursorX = target.X;
+            Diagnostics.CursorY = target.Y;
+            Diagnostics.HasCursorTarget = true;
         }
 
         private bool IsAnyGripHeld()
@@ -1102,30 +1361,45 @@ namespace KinectV2MouseControl
         }
 
         /// <summary>
-        /// A new hand has taken control. Clears filter and anchor state so the cursor starts
-        /// from this hand's actual position instead of easing in from the previous one.
-        ///
-        /// Grips are released here as well. When control passes to the hand that was until now
-        /// the clicking hand of a two-hand mode, that hand stops being polled for hand state,
-        /// so a button it was holding would otherwise never be released.
+        /// The right hand has stabilized and takes control. Clears everything left over from
+        /// any previous session and seeds the filter at the stabilized hand position, so the
+        /// cursor snaps once to where the hand is and continues from there.
         /// </summary>
-        private void BeginControlSession()
+        private void BeginControlSession(MVector2 seedPosition)
         {
             ReleaseAllGrips();
             cursorMapper.ResetSmoothing();
             handStateFilters[0].Reset();
             handStateFilters[1].Reset();
-            // A gesture belongs to the hand that started it. Handing control to the other hand
-            // must not let a half-formed swipe or scroll carry over. The clap is deliberately
-            // spared: bringing the hands together to clap can itself change which hand is in
-            // charge, and clearing it here would make a double clap impossible to complete.
+            // A gesture belongs to the session that started it. The clap is deliberately
+            // spared: bringing the hands together to clap can itself start or end a session,
+            // and clearing it here would make a double clap impossible to complete.
             gestureEngine.ResetControlSession();
             ClearCursorState();
+            cursorMapper.SeedSmoothing(seedPosition);
+            skippedPointerTime = 0;
+
+            sessionStartTime = frameClock.Elapsed.TotalSeconds;
+            sessionFrames = 0;
+            sessionDeltaMax = 0;
+            RuntimeLog.Write("Pointer session ACTIVE (body q " + sensorReader.LockedBodyScore + "/6)");
         }
 
         /// <summary>
-        /// The controlling hand is gone. Hands the cursor back to the physical mouse, and drops
-        /// any held button - a drag cannot be meaningfully continued without cursor control.
+        /// Ends the active pointer session: releases buttons, hands the cursor back to the
+        /// physical mouse and returns the stabilizer to Waiting.
+        /// </summary>
+        private void EndPointerSession(string reason)
+        {
+            EndSessionLog(reason);
+            usedHandIndex = NONE_USED;
+            ReleaseGrip(PointerHand);
+            EndControlSession();
+        }
+
+        /// <summary>
+        /// Drops any held button - a drag cannot be meaningfully continued without cursor
+        /// control - and every piece of session state.
         /// </summary>
         private void EndControlSession()
         {
@@ -1134,7 +1408,22 @@ namespace KinectV2MouseControl
             handStateFilters[0].Reset();
             handStateFilters[1].Reset();
             gestureEngine.ResetControlSession();
+            stabilizer.Reset();
             ClearCursorState();
+        }
+
+        private void EndSessionLog(string reason)
+        {
+            if (usedHandIndex == NONE_USED)
+            {
+                return;
+            }
+
+            double duration = frameClock.Elapsed.TotalSeconds - sessionStartTime;
+            RuntimeLog.Write("Pointer session ended (" + reason + "): " + duration.ToString("0.0") + " s, "
+                + sessionFrames + " frames, avg dt " + (frameDeltaAverage * 1000).ToString("0.0")
+                + " ms, max dt " + (sessionDeltaMax * 1000).ToString("0") + " ms, glitches "
+                + stabilizer.GlitchCount + ", noise " + cursorMapper.ResidualNoise.ToString("0") + " px");
         }
 
         private void ClearCursorState()
@@ -1153,7 +1442,9 @@ namespace KinectV2MouseControl
             hasLastCursorPos = false;
             hoverClicked = false;
             hasLastFrameTime = false;
+            skippedPointerTime = 0;
             outputLoop.ClearTarget();
+            Diagnostics.HasCursorTarget = false;
         }
 
         /// <summary>
@@ -1167,10 +1458,11 @@ namespace KinectV2MouseControl
             cursorMapper.ResetSmoothing();
             handStateFilters[0].Reset();
             handStateFilters[1].Reset();
+            stabilizer.Reset();
 
-            // Gestures must not survive the session that produced them, and the activation
-            // latches have to drop so reacquisition requires crossing the full threshold again
-            // rather than only the hysteresis-relaxed one.
+            // Gestures and the clutch must not survive the session that produced them, and the
+            // activation latches have to drop so reacquisition requires crossing the full
+            // threshold again rather than only the hysteresis-relaxed one.
             gestureEngine.Reset();
             gestureContext.Clear();
             handActivated[0] = false;
@@ -1189,10 +1481,6 @@ namespace KinectV2MouseControl
         private void DoMouseClickByHandLifting(int handIndex, MVector2 handRelativePos)
         {
             UpdateHandMouseControl(handIndex, handRelativePos.Y > HandLiftYForClick ? MouseControlState.ShouldClick : MouseControlState.ShouldRelease);
-            
-            //DoMouseControlByHandLifting(with press and releas rather than just a click):
-            //MouseControlState controlState = handRelativePos.Y > HandLiftYForClick ? MouseControlState.ShouldPress : MouseControlState.ShouldRelease;
-            //UpdateHandMouseControl(handIndex, controlState);
         }
 
         private enum MouseControlState
@@ -1289,17 +1577,103 @@ namespace KinectV2MouseControl
         private void ActionRouter_ActionExecuted(object sender, ControlAction action)
         {
             Diagnostics.LastAction = action.ToString();
+            PostActionActivity(action, actionRouter.LastSource);
+        }
+
+        /// <summary>
+        /// Feeds the recent-activity stream. Grip releases are implied by the press that
+        /// preceded them, and consecutive scroll notches in the same direction collapse into
+        /// one line with a count, so a long scroll does not drown everything else.
+        /// </summary>
+        private static void PostActionActivity(ControlAction action, string source)
+        {
+            switch (action.Type)
+            {
+                case ControlActionType.LeftMouseUp:
+                    return;
+
+                case ControlActionType.LeftMouseDown:
+                    ActivityLog.Post(ActivityKind.Action, "Grip press", "Right fist - click or drag", source);
+                    return;
+
+                case ControlActionType.LeftClick:
+                    ActivityLog.Post(ActivityKind.Action, "Click", source == ActionRouter.GestureSource ? "Hover / lift click" : null, source);
+                    return;
+
+                case ControlActionType.RightClick:
+                    ActivityLog.Post(ActivityKind.Action, "Right click", source == ActionRouter.GestureSource ? "Right-hand lasso" : null, source);
+                    return;
+
+                case ControlActionType.Scroll:
+                    {
+                        bool up = action.Value >= 0;
+                        ActivityLog.Post(ActivityKind.Action, up ? "Scroll up" : "Scroll down",
+                            source == ActionRouter.GestureSource ? "Left fist clutch" : null, source,
+                            "scroll" + (up ? "+" : "-"), 1.5);
+                        return;
+                    }
+
+                case ControlActionType.NextWindow:
+                case ControlActionType.PreviousWindow:
+                    ActivityLog.Post(ActivityKind.Action, action.ToString(),
+                        source == ActionRouter.GestureSource ? "Left fist swipe" : null, source);
+                    return;
+
+                case ControlActionType.ToggleControl:
+                case ControlActionType.EnableControl:
+                case ControlActionType.DisableControl:
+                    // SetControlEnabled posts its own entry, with the outcome.
+                    return;
+
+                default:
+                    ActivityLog.Post(ActivityKind.Action, action.ToString(), null, source);
+                    return;
+            }
+        }
+
+        private static string DescribeHand(HandSnapshot hand)
+        {
+            if (hand.PositionWeight <= 0)
+            {
+                return "not tracked";
+            }
+
+            return hand.State + "/" + (hand.IsConfident ? "Hi" : "Lo") + "/"
+                + (hand.JointState == TrackingState.Tracked ? "T" : "Inf")
+                + (hand.IsActivated ? " zone" : "");
         }
 
         private void UpdateDiagnostics()
         {
             Diagnostics.IsTracking = true;
             Diagnostics.IsControlEnabled = controlEnabled;
+            Diagnostics.BodyCount = sensorReader.TrackedBodyCount;
+            Diagnostics.BodyScore = sensorReader.LockedBodyScore;
             Diagnostics.Mode = gestureEngine.State.ToString();
             Diagnostics.ClapState = gestureEngine.ClapStateText;
+            Diagnostics.ClutchState = gestureEngine.ClutchStateText;
+            Diagnostics.SecondaryMode = gestureEngine.SecondaryModeText;
             Diagnostics.ScrollNeutral = gestureEngine.ScrollNeutralHeight;
             Diagnostics.ScrollOffset = gestureEngine.ScrollOffset;
+            Diagnostics.ScrollRate = gestureEngine.ScrollRate;
             Diagnostics.LockDisplacement = stationaryLock.LockDisplacement;
+            Diagnostics.FrameDeltaMs = frameDeltaAverage * 1000;
+            Diagnostics.FrameDeltaMaxMs = frameDeltaRecentMax * 1000;
+            Diagnostics.ResidualNoise = cursorMapper.ResidualNoise;
+            Diagnostics.GlitchCount = stabilizer.GlitchCount;
+
+            if (!controlEnabled)
+            {
+                Diagnostics.PointerSession = "Off (control disabled)";
+            }
+            else if (calibration.IsCapturing)
+            {
+                Diagnostics.PointerSession = "Off (calibrating)";
+            }
+            else
+            {
+                Diagnostics.PointerSession = stabilizer.StateText;
+            }
 
             if (!controlEnabled || usedHandIndex == NONE_USED)
             {
@@ -1318,36 +1692,70 @@ namespace KinectV2MouseControl
                 Diagnostics.PointerState = "Moving";
             }
 
-            Diagnostics.ControlHand = GestureContext.DescribeHand(usedHandIndex);
-            Diagnostics.LeftHandState = gestureContext.Hands[GestureContext.LeftHand].State.ToString();
-            Diagnostics.RightHandState = gestureContext.Hands[GestureContext.RightHand].State.ToString();
+            HandSnapshot right = gestureContext.Hands[PointerHand];
+            HandSnapshot left = gestureContext.Hands[SecondaryHand];
+
+            Diagnostics.LeftHandState = DescribeHand(left);
+            Diagnostics.RightHandState = DescribeHand(right);
             Diagnostics.Gesture = gestureEngine.ActiveGestureName;
 
-            // Report whichever hand is in charge, falling back to the right hand so the
-            // height readout is still usable while working out why control will not engage.
-            int reportedHand = usedHandIndex == NONE_USED ? GestureContext.RightHand : usedHandIndex;
-            Diagnostics.ControlHandHeight = gestureContext.Hands[reportedHand].Height;
-            Diagnostics.ControlHandForward = gestureContext.Hands[reportedHand].ForwardDistance;
+            Diagnostics.ControlHandHeight = right.Height;
+            Diagnostics.ControlHandForward = right.ForwardDistance;
+            Diagnostics.ControlHandX = right.Position.X;
+            Diagnostics.SecondaryHandHeight = left.Height;
+            Diagnostics.SecondaryHandX = left.Position.X;
+            Diagnostics.SecondaryHandForward = left.ForwardDistance;
+
+            Diagnostics.RightHandTracked = right.PositionWeight > 0;
+            Diagnostics.LeftHandTracked = left.PositionWeight > 0;
+            Diagnostics.RightHandActivated = right.IsActivated;
+            Diagnostics.LeftHandActivated = left.IsActivated;
+            Diagnostics.RightHandClosed = right.State == HandState.Closed;
+            Diagnostics.LeftHandClosed = left.State == HandState.Closed;
+            Diagnostics.RightHandLasso = right.State == HandState.Lasso;
+            Diagnostics.IsPointerActive = controlEnabled && usedHandIndex != NONE_USED;
+            Diagnostics.IsClutchArmed = gestureEngine.IsSecondaryGestureArmed;
+            Diagnostics.IsGripHeld = IsAnyGripHeld();
         }
 
         private void SetDiagnosticsIdle(bool isTracking)
         {
             Diagnostics.IsTracking = isTracking;
             Diagnostics.IsControlEnabled = controlEnabled;
+            Diagnostics.BodyCount = sensorReader.TrackedBodyCount;
+            Diagnostics.BodyScore = sensorReader.LockedBodyScore;
             Diagnostics.Mode = GestureState.Idle.ToString();
-            Diagnostics.ControlHand = "None";
+            Diagnostics.PointerSession = controlEnabled ? "Waiting" : "Off (control disabled)";
             Diagnostics.LeftHandState = "-";
             Diagnostics.RightHandState = "-";
+            Diagnostics.ClutchState = "Off";
+            Diagnostics.SecondaryMode = "None";
             Diagnostics.Gesture = "None";
             Diagnostics.PointerState = "-";
             Diagnostics.LockDisplacement = 0;
             Diagnostics.ScrollNeutral = null;
             Diagnostics.ScrollOffset = 0;
+            Diagnostics.ScrollRate = 0;
             Diagnostics.ClapState = "Idle";
             Diagnostics.ControlHandHeight = 0;
             Diagnostics.ControlHandForward = 0;
+            Diagnostics.ControlHandX = 0;
+            Diagnostics.SecondaryHandHeight = 0;
+            Diagnostics.SecondaryHandX = 0;
+            Diagnostics.SecondaryHandForward = 0;
+            Diagnostics.RightHandTracked = false;
+            Diagnostics.LeftHandTracked = false;
+            Diagnostics.RightHandActivated = false;
+            Diagnostics.LeftHandActivated = false;
+            Diagnostics.RightHandClosed = false;
+            Diagnostics.LeftHandClosed = false;
+            Diagnostics.RightHandLasso = false;
+            Diagnostics.IsPointerActive = false;
+            Diagnostics.IsClutchArmed = false;
+            Diagnostics.IsGripHeld = false;
+            Diagnostics.HasCursorTarget = false;
         }
 
     }
-    
+
 }

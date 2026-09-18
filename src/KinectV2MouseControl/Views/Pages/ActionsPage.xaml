@@ -1,0 +1,134 @@
+<UserControl x:Class="KinectV2MouseControl.ActionsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:KinectV2MouseControl">
+    <UserControl.Resources>
+        <Style x:Key="FlowBox" TargetType="Border" BasedOn="{StaticResource CardInset}">
+            <Setter Property="Padding" Value="16,14"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+        </Style>
+
+        <DataTemplate x:Key="ActionCardTemplate">
+            <Border Style="{StaticResource Card}" Width="300" Margin="0,0,14,14" Padding="16"
+                    Opacity="{Binding IsImplemented, Converter={StaticResource OnOpacity}}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid>
+                        <TextBlock Text="{Binding Name}" Style="{StaticResource Text.CardTitle}" Margin="0,0,80,0"/>
+                        <Border Style="{StaticResource Pill}" HorizontalAlignment="Right" VerticalAlignment="Top" Padding="8,2"
+                                Background="{Binding IsImplemented, Converter={StaticResource PlannedSoftBrush}}">
+                            <TextBlock Style="{StaticResource Pill.Text}" FontSize="10.5" Text="{Binding StatusText}"
+                                       Foreground="{Binding IsImplemented, Converter={StaticResource PlannedBrush}}"/>
+                        </Border>
+                    </Grid>
+                    <TextBlock Grid.Row="1" Text="{Binding Description}" Style="{StaticResource Text.Caption}" Margin="0,6,0,10"/>
+                    <Grid Grid.Row="2">
+                        <TextBlock Text="{Binding TriggerText}" Style="{StaticResource Text.Caption}" FontSize="11"
+                                   Foreground="{StaticResource Brush.TextDim}" VerticalAlignment="Center" Margin="0,0,70,0"/>
+                        <Button Style="{StaticResource Button.Ghost}" HorizontalAlignment="Right" Padding="10,4"
+                                Command="{Binding RunCommand}" Visibility="{Binding CanRun, Converter={StaticResource BoolToVis}}"
+                                ToolTip="Execute this action now, through the router">
+                            <StackPanel Orientation="Horizontal">
+                                <local:IconView Icon="{StaticResource IconPlay}" Size="11" Margin="0,0,6,0"/>
+                                <TextBlock Text="Run" FontSize="12"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ActionGroupTemplate">
+            <StackPanel Margin="0,0,0,10">
+                <Grid Margin="0,14,0,10">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Title}" Style="{StaticResource Text.EyebrowAccent}" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding Detail}" Style="{StaticResource Text.Caption}" FontSize="11" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding CountText}" Style="{StaticResource Text.Caption}" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource ActionCardTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="28,16,28,28">
+
+            <!-- ============================ Input → Intent → Action ============================ -->
+            <Border Style="{StaticResource CardStrong}">
+                <StackPanel>
+                    <Grid Margin="0,0,0,14">
+                        <TextBlock Text="HOW EVERYTHING GETS DONE" Style="{StaticResource Text.Eyebrow}"/>
+                        <TextBlock Style="{StaticResource Text.Caption}" HorizontalAlignment="Right">
+                            <Run Text="{Binding Actions.AvailableCount, Mode=OneWay}"/><Run Text=" actions available &#183; "/><Run Text="{Binding Actions.PlannedCount, Mode=OneWay}"/><Run Text=" planned"/>
+                        </TextBlock>
+                    </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource FlowBox}">
+                            <StackPanel>
+                                <TextBlock Text="INPUT" Style="{StaticResource Text.EyebrowAccent}" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <local:IconView Icon="{StaticResource IconGestures}" Size="15" Margin="0,0,8,0" Foreground="{StaticResource Brush.Success}"/>
+                                    <TextBlock Text="Gestures" Style="{StaticResource Text.Body}"/>
+                                    <TextBlock Text="  hardware-tested" Style="{StaticResource Text.Caption}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <local:IconView Icon="{StaticResource IconVoice}" Size="15" Margin="0,0,8,0" Foreground="{StaticResource Brush.Accent}"/>
+                                    <TextBlock Text="Voice" Style="{StaticResource Text.Body}"/>
+                                    <TextBlock Text="  local, beta" Style="{StaticResource Text.Caption}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <local:IconView Icon="{StaticResource IconAi}" Size="15" Margin="0,0,8,0" Foreground="{StaticResource Brush.TextFaint}"/>
+                                    <TextBlock Text="Assistant" Style="{StaticResource Text.Body}"/>
+                                    <TextBlock Text="  planned" Style="{StaticResource Text.Caption}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <local:IconView Grid.Column="1" Icon="{StaticResource IconArrowRight}" Size="20" Margin="14,0" Foreground="{StaticResource Brush.Accent}"/>
+                        <Border Grid.Column="2" Style="{StaticResource FlowBox}">
+                            <StackPanel>
+                                <TextBlock Text="INTENT" Style="{StaticResource Text.EyebrowAccent}" Margin="0,0,0,8"/>
+                                <TextBlock Text="One semantic action" Style="{StaticResource Text.Body}"/>
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
+                                           Text="&#8220;Next window&#8221;, &#8220;Scroll up 3&#8221;, &#8220;Control off&#8221; - the same vocabulary whoever asked. Inputs never touch Windows themselves."/>
+                            </StackPanel>
+                        </Border>
+                        <local:IconView Grid.Column="3" Icon="{StaticResource IconArrowRight}" Size="20" Margin="14,0" Foreground="{StaticResource Brush.Accent}"/>
+                        <Border Grid.Column="4" Style="{StaticResource FlowBox}">
+                            <StackPanel>
+                                <TextBlock Text="ACTION" Style="{StaticResource Text.EyebrowAccent}" Margin="0,0,0,8"/>
+                                <TextBlock Text="The router carries it out" Style="{StaticResource Text.Body}"/>
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
+                                           Text="Mouse buttons and wheel, keyboard chords, media keys, app launch, or the control gate. Every execution shows in the activity feed with its source."/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,14,0,0"
+                               Text="Pointer movement is the one deliberate exception: it is a continuous stream from the right hand to the cursor and never becomes an action, which is also why no voice or AI command will ever move the pointer."/>
+                </StackPanel>
+            </Border>
+
+            <!-- ============================ Catalog ============================ -->
+            <ItemsControl ItemsSource="{Binding Actions.Groups}" ItemTemplate="{StaticResource ActionGroupTemplate}" Margin="0,10,0,0"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

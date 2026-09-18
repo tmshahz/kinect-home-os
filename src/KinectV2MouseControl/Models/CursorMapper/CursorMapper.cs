@@ -57,6 +57,18 @@ namespace KinectV2MouseControl
 
         private MVector2 totalScale;
 
+        /// <summary>
+        /// Output pixels per input metre on each axis (MoveScale × AlignScale), signed. The
+        /// control center uses it to draw the hand region that reaches the whole desktop.
+        /// </summary>
+        public MVector2 TotalScale
+        {
+            get
+            {
+                return totalScale;
+            }
+        }
+
         private readonly OneEuroVectorFilter positionFilter = new OneEuroVectorFilter();
 
         /// <summary>
@@ -178,12 +190,52 @@ namespace KinectV2MouseControl
         }
 
         /// <summary>
-        /// Radius in output pixels that the filtered position must leave before the cursor is
-        /// allowed to move again. Absorbs the last of the sensor shimmer and any physical hand
-        /// tremor while aiming. Once exceeded the cursor goes to the full filtered position, so
-        /// this costs nothing during real movement.
+        /// Radius in output pixels of the jitter dead zone. Absorbs the last of the sensor
+        /// shimmer and any physical hand tremor while aiming.
+        ///
+        /// This is a continuous (soft) dead zone. The original was all-or-nothing: inside the
+        /// radius the output held still, and once the radius was exceeded the output jumped to
+        /// the full filtered position. That made it a noise gate with two modes. When tracking
+        /// noise sat below the radius the cursor was rock steady; when conditions made the noise
+        /// slightly larger than the radius - lighting, distance, posture, a seated pose - every
+        /// crossing produced a jump of at least the whole radius, back and forth, and those
+        /// jumps also kept the stationary lock from ever engaging. That is the intermittent
+        /// "sometimes perfect, sometimes badly jittery" behaviour.
+        ///
+        /// Now the output trails the filtered position at a distance of radius²/distance once
+        /// outside the radius. That is continuous at the boundary (no jump), moves the cursor
+        /// only by roughly twice the excess for noise just past the radius, and shrinks toward
+        /// zero lag as the movement gets faster, so deliberate movement is still not held back.
         /// </summary>
         public double JitterDeadzone { get; set; } = 3.0;
+
+        /// <summary>
+        /// Monitor layout used to keep the mapped position on a real monitor before it is
+        /// filtered. Null leaves the mapped position unclamped.
+        ///
+        /// Clamping before the filter, rather than only afterwards, is what removes the "sticky
+        /// edge": with a post-filter clamp alone, a hand that overshoots the screen edge drags
+        /// the filter state off screen, and the cursor does not move again until the hand has
+        /// travelled all the way back. Clamped first, reversing at the edge responds at once.
+        /// </summary>
+        public DesktopLayout Desktop { get; set; }
+
+        /// <summary>
+        /// Smoothed RMS distance, in output pixels, between the raw mapped position and the
+        /// filtered one. While the hand is held still this is a direct reading of how noisy the
+        /// tracking is right now; during movement it also includes normal filter lag.
+        /// </summary>
+        public double ResidualNoise
+        {
+            get
+            {
+                return Math.Sqrt(residualMeanSquare);
+            }
+        }
+
+        private double residualMeanSquare;
+
+        private const double RESIDUAL_TIME_CONSTANT = 1.0;
 
         public CursorMapper(MRect inputRect, MRect outputRect, ScaleAlignment scaleAlign = ScaleAlignment.None)
         {
@@ -216,31 +268,76 @@ namespace KinectV2MouseControl
         /// </param>
         public MVector2 GetSmoothedOutputPosition(MVector2 inputPosition, double deltaTime, double positionWeight = 1)
         {
-            MVector2 filteredPosition = positionFilter.Filter(GetOutputPosition(inputPosition), deltaTime, positionWeight);
+            MVector2 mappedPosition = GetClampedOutputPosition(inputPosition);
+            MVector2 filteredPosition = positionFilter.Filter(mappedPosition, deltaTime, positionWeight);
+
+            if (deltaTime > 0)
+            {
+                double residual = (mappedPosition - filteredPosition).Length();
+                double blend = 1 - Math.Exp(-deltaTime / RESIDUAL_TIME_CONSTANT);
+                residualMeanSquare += (residual * residual - residualMeanSquare) * blend;
+            }
 
             if (!hasSmoothedPosition)
             {
                 smoothedPosition = filteredPosition;
                 hasSmoothedPosition = true;
+                return smoothedPosition;
             }
-            else if ((filteredPosition - smoothedPosition).Length() > JitterDeadzone)
+
+            MVector2 offset = filteredPosition - smoothedPosition;
+            double distance = offset.Length();
+
+            if (distance > JitterDeadzone)
             {
-                smoothedPosition = filteredPosition;
+                if (JitterDeadzone <= 0)
+                {
+                    smoothedPosition = filteredPosition;
+                }
+                else
+                {
+                    // Trail at radius²/distance behind the filtered position: equal to the
+                    // radius at the boundary, falling toward zero as the step grows.
+                    double lag = JitterDeadzone * JitterDeadzone / distance;
+                    smoothedPosition = filteredPosition - offset * (lag / distance);
+                }
             }
 
             return smoothedPosition;
         }
 
+        private MVector2 GetClampedOutputPosition(MVector2 inputPosition)
+        {
+            MVector2 mapped = GetOutputPosition(inputPosition);
+            return Desktop != null ? Desktop.Clamp(mapped) : mapped;
+        }
+
+        /// <summary>
+        /// Starts the smoothing state at a known-good input position, with no velocity history,
+        /// so a new pointer session begins exactly where the hand is instead of from whatever
+        /// single sample happened to arrive first.
+        /// </summary>
+        public void SeedSmoothing(MVector2 inputPosition)
+        {
+            ResetSmoothing();
+
+            MVector2 mapped = GetClampedOutputPosition(inputPosition);
+            positionFilter.Seed(mapped);
+            smoothedPosition = mapped;
+            hasSmoothedPosition = true;
+        }
+
         /// <summary>
         /// Drops the smoothing state, so the next smoothed position starts from the hand's
-        /// actual mapped position. Call this whenever tracking is lost or a new hand takes
-        /// over control, otherwise the cursor eases in from wherever it was left behind.
+        /// actual mapped position. Call this whenever tracking is lost or a new session starts,
+        /// otherwise the cursor eases in from wherever it was left behind.
         /// </summary>
         public void ResetSmoothing()
         {
             hasSmoothedPosition = false;
             smoothedPosition = MVector2.Zero;
             positionFilter.Reset();
+            residualMeanSquare = 0;
         }
 
         public void SetRects(MRect inputRect, MRect outputRect)

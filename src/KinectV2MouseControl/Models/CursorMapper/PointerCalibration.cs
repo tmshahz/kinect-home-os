@@ -2,6 +2,17 @@ using System;
 
 namespace KinectV2MouseControl
 {
+    public enum CalibrationStep
+    {
+        None,
+        Center,
+        Left,
+        Right,
+        Top,
+        Bottom,
+        Complete
+    }
+
     /// <summary>
     /// Describes the patch of air the hand actually moves through, so it can be mapped onto the
     /// whole virtual desktop without exaggerated reach.
@@ -14,12 +25,14 @@ namespace KinectV2MouseControl
     ///
     /// Calibrated mode replaces that with an explicit input rectangle and independent per-axis
     /// scaling, so horizontal and vertical reach are chosen separately. It is opt-in: with
-    /// UseCalibratedRange off the mapping is bit-for-bit the original one, so an existing tuned
-    /// MoveScale keeps its meaning.
+    /// UseCalibratedRange off the mapping is bit-for-bit the original one. In calibrated mode
+    /// the rectangle alone defines the scale - Movement Scale is not applied on top of it - so
+    /// the comfortable extents always map onto the desktop edges.
     ///
     /// Everything here is in body-relative metres, measured from SpineBase, so the comfortable
     /// rectangle travels with the user rather than being anchored to the room. No assumption is
-    /// made about how the sensor is mounted.
+    /// made about how the sensor is mounted, or about which monitor is primary: the rectangle
+    /// maps onto the whole virtual desktop bounding box.
     /// </summary>
     public class PointerCalibration
     {
@@ -28,6 +41,30 @@ namespace KinectV2MouseControl
         /// otherwise divide by something near zero and send the cursor to infinity.
         /// </summary>
         private const double MIN_RANGE = 0.05;
+
+        /// <summary>
+        /// How far the hand may drift while a guided point is being held, metres.
+        /// </summary>
+        private const double STEADY_RADIUS = 0.03;
+
+        /// <summary>
+        /// How long a guided point must be held steady before it is captured, seconds.
+        /// </summary>
+        private const double STEADY_HOLD = 0.6;
+
+        /// <summary>
+        /// Minimum distance of an extent from the captured centre, metres, in the step's own
+        /// direction. Stops the previous point being captured again because the hand has not
+        /// moved yet, and rejects an extent on the wrong side of centre.
+        /// </summary>
+        private const double MIN_EXTENT_FROM_CENTER = 0.08;
+
+        /// <summary>
+        /// Fraction trimmed off each side of the captured extents. The desktop edge is then
+        /// reached a little before the hand is at its comfortable limit, which makes corners
+        /// easy to hit even with filtering lag, instead of demanding a full stretch every time.
+        /// </summary>
+        private const double EDGE_ASSIST = 0.05;
 
         /// <summary>
         /// When off, the original uniform-scale mapping is used unchanged.
@@ -72,115 +109,304 @@ namespace KinectV2MouseControl
                 -halfHeight);
         }
 
-        // ---- Capture ----------------------------------------------------------------------
+        // ---- Guided capture ------------------------------------------------------------------
+        //
+        // The earlier free sweep took the min/max of every sample, so a single noisy frame or a
+        // momentary overreach set the edge, and results were hard to reproduce. The guided flow
+        // instead asks for five held points - centre, left, right, top, bottom - each captured
+        // as the average of a steady hold, and each validated to lie on the correct side of the
+        // centre. Only the right (pointer) hand is sampled, and only while it is inside the
+        // activation zone, so the captured range is by construction one that can actually be
+        // used for pointing.
+        //
+        // The mapping stays linear per axis: the rectangle runs from the left extent to the
+        // right extent and from the bottom to the top. A piecewise mapping pinning the captured
+        // centre to the desktop centre was considered and rejected - it puts a change of gain
+        // right in the middle of the most-used area. The centre point is used to validate the
+        // extents and is reported in diagnostics.
 
-        private double minX;
-        private double maxX;
-        private double minY;
-        private double maxY;
-        private bool hasSample;
+        private MVector2 anchor;
+        private bool hasAnchor;
+        private double held;
+        private MVector2 heldSum;
+        private int heldCount;
+        private bool isWrongSide;
+
+        private MVector2 capturedCenter;
+        private double capturedLeft;
+        private double capturedRight;
+        private double capturedTop;
+        private double capturedBottom;
+
+        public CalibrationStep Step { get; private set; }
 
         /// <summary>
-        /// True while extents are being recorded from live hand movement.
+        /// True while guided points are being recorded from live hand movement.
         /// </summary>
-        public bool IsCapturing { get; private set; }
-
-        public double CapturedRangeX
+        public bool IsCapturing
         {
             get
             {
-                return hasSample ? maxX - minX : 0;
+                return Step != CalibrationStep.None && Step != CalibrationStep.Complete;
             }
         }
 
-        public double CapturedRangeY
+        /// <summary>
+        /// True once all five points are in and the capture is waiting to be applied.
+        /// </summary>
+        public bool IsCaptureComplete
         {
             get
             {
-                return hasSample ? maxY - minY : 0;
+                return Step == CalibrationStep.Complete;
+            }
+        }
+
+        /// <summary>
+        /// Outcome of the last finished or cancelled capture, for the UI.
+        /// </summary>
+        public string LastResultText { get; private set; } = "";
+
+        /// <summary>
+        /// Progress of the current steady hold, 0-1, for the control center's progress ring.
+        /// Zero whenever no hold is in progress.
+        /// </summary>
+        public double HoldProgress
+        {
+            get
+            {
+                if (!IsCapturing || !hasAnchor || isWrongSide)
+                {
+                    return 0;
+                }
+
+                return Math.Min(1, held / STEADY_HOLD);
+            }
+        }
+
+        /// <summary>
+        /// True while capturing but the right hand has not yet entered the control zone.
+        /// </summary>
+        public bool IsWaitingForHand
+        {
+            get
+            {
+                return IsCapturing && !hasAnchor;
+            }
+        }
+
+        /// <summary>
+        /// Instruction for the current step, for the UI.
+        /// </summary>
+        public string PromptText
+        {
+            get
+            {
+                string instruction;
+                switch (Step)
+                {
+                    case CalibrationStep.Center:
+                        instruction = "1/5 CENTRE: point RIGHT hand comfortably at the middle of the desktop";
+                        break;
+                    case CalibrationStep.Left:
+                        instruction = "2/5 LEFT: hold RIGHT hand at your comfortable LEFT limit";
+                        break;
+                    case CalibrationStep.Right:
+                        instruction = "3/5 RIGHT: hold RIGHT hand at your comfortable RIGHT limit";
+                        break;
+                    case CalibrationStep.Top:
+                        instruction = "4/5 TOP: hold RIGHT hand at your comfortable TOP limit";
+                        break;
+                    case CalibrationStep.Bottom:
+                        instruction = "5/5 BOTTOM: hold RIGHT hand at your comfortable BOTTOM limit (still raised)";
+                        break;
+                    default:
+                        return LastResultText;
+                }
+
+                if (!hasAnchor)
+                {
+                    return instruction + "  - raise right hand into the control zone";
+                }
+
+                if (isWrongSide)
+                {
+                    return instruction + "  - move further from centre";
+                }
+
+                int percent = (int)Math.Min(100, held / STEADY_HOLD * 100);
+                return instruction + "  - hold still " + percent + "%";
             }
         }
 
         public void BeginCapture()
         {
-            hasSample = false;
-            minX = 0;
-            maxX = 0;
-            minY = 0;
-            maxY = 0;
-            IsCapturing = true;
+            Step = CalibrationStep.Center;
+            ClearHold();
         }
 
         /// <summary>
-        /// Feeds one hand position, in the same pointer-mapping frame the rectangle describes:
-        /// body-relative and already offset by PointerCenterHeight.
+        /// Feeds one right-hand position, in the same pointer-mapping frame the rectangle
+        /// describes: body-relative and already offset by PointerCenterHeight.
         /// </summary>
-        public void AddSample(MVector2 mappingFramePosition)
+        public void AddSample(MVector2 mappingFramePosition, double deltaTime)
         {
             if (!IsCapturing)
             {
                 return;
             }
 
-            if (!hasSample)
+            if (!hasAnchor || (mappingFramePosition - anchor).Length() > STEADY_RADIUS)
             {
-                minX = maxX = mappingFramePosition.X;
-                minY = maxY = mappingFramePosition.Y;
-                hasSample = true;
+                anchor = mappingFramePosition;
+                hasAnchor = true;
+                held = 0;
+                heldSum = mappingFramePosition;
+                heldCount = 1;
+                isWrongSide = !IsOnCorrectSide(mappingFramePosition);
                 return;
             }
 
-            if (mappingFramePosition.X < minX) minX = mappingFramePosition.X;
-            if (mappingFramePosition.X > maxX) maxX = mappingFramePosition.X;
-            if (mappingFramePosition.Y < minY) minY = mappingFramePosition.Y;
-            if (mappingFramePosition.Y > maxY) maxY = mappingFramePosition.Y;
+            held += deltaTime;
+            heldSum += mappingFramePosition;
+            heldCount++;
+
+            MVector2 mean = heldSum * (1.0 / heldCount);
+            isWrongSide = !IsOnCorrectSide(mean);
+
+            if (isWrongSide)
+            {
+                held = 0;
+                return;
+            }
+
+            if (held >= STEADY_HOLD)
+            {
+                Record(mean);
+                ClearHold();
+            }
         }
 
         /// <summary>
-        /// Ends capture and adopts the swept extents, if they describe a usable rectangle.
+        /// The pointer hand is not usable this frame (down, untracked, inferred). The hold in
+        /// progress is abandoned so a point is only ever captured from a continuous steady hold.
+        /// </summary>
+        public void NoSample()
+        {
+            ClearHold();
+        }
+
+        private bool IsOnCorrectSide(MVector2 position)
+        {
+            switch (Step)
+            {
+                case CalibrationStep.Left:
+                    return position.X <= capturedCenter.X - MIN_EXTENT_FROM_CENTER;
+                case CalibrationStep.Right:
+                    return position.X >= capturedCenter.X + MIN_EXTENT_FROM_CENTER;
+                case CalibrationStep.Top:
+                    return position.Y >= capturedCenter.Y + MIN_EXTENT_FROM_CENTER;
+                case CalibrationStep.Bottom:
+                    return position.Y <= capturedCenter.Y - MIN_EXTENT_FROM_CENTER;
+                default:
+                    return true;
+            }
+        }
+
+        private void Record(MVector2 position)
+        {
+            switch (Step)
+            {
+                case CalibrationStep.Center:
+                    capturedCenter = position;
+                    Step = CalibrationStep.Left;
+                    break;
+                case CalibrationStep.Left:
+                    capturedLeft = position.X;
+                    Step = CalibrationStep.Right;
+                    break;
+                case CalibrationStep.Right:
+                    capturedRight = position.X;
+                    Step = CalibrationStep.Top;
+                    break;
+                case CalibrationStep.Top:
+                    capturedTop = position.Y;
+                    Step = CalibrationStep.Bottom;
+                    break;
+                case CalibrationStep.Bottom:
+                    capturedBottom = position.Y;
+                    Step = CalibrationStep.Complete;
+                    break;
+            }
+        }
+
+        private void ClearHold()
+        {
+            hasAnchor = false;
+            held = 0;
+            heldSum = MVector2.Zero;
+            heldCount = 0;
+            isWrongSide = false;
+        }
+
+        /// <summary>
+        /// Adopts a completed capture.
         ///
-        /// The vertical centre of the sweep is folded back into PointerCenterHeight rather than
-        /// stored here, which is why it is returned instead of applied: a sweep centred 6 cm
-        /// above the current pointer height means the pointer height itself was 6 cm too low.
+        /// The vertical centre of the captured extents is folded back into PointerCenterHeight
+        /// rather than stored here, which is why it is returned instead of applied.
         /// </summary>
         /// <param name="pointerCenterHeightAdjustment">
-        /// Metres to add to PointerCenterHeight so the swept region is vertically centred.
+        /// Metres to add to PointerCenterHeight so the captured region is vertically centred.
         /// </param>
         /// <returns>True when the capture was usable and the ranges were adopted.</returns>
         public bool EndCapture(out double pointerCenterHeightAdjustment)
         {
             pointerCenterHeightAdjustment = 0;
-            IsCapturing = false;
 
-            if (!hasSample)
+            if (Step != CalibrationStep.Complete)
             {
+                Step = CalibrationStep.None;
+                LastResultText = "Calibration cancelled - previous mapping kept";
                 return false;
             }
 
-            double rangeX = maxX - minX;
-            double rangeY = maxY - minY;
+            Step = CalibrationStep.None;
+
+            double rangeX = (capturedRight - capturedLeft) * (1 - 2 * EDGE_ASSIST);
+            double rangeY = (capturedTop - capturedBottom) * (1 - 2 * EDGE_ASSIST);
 
             if (rangeX < MIN_RANGE || rangeY < MIN_RANGE)
             {
+                LastResultText = "Calibration rejected: range too small - previous mapping kept";
                 return false;
             }
 
             HandRangeX = rangeX;
             HandRangeY = rangeY;
 
-            // Samples arrive in the same frame the rectangle is expressed in, so the sweep's
-            // centre is the new centre outright rather than an adjustment to the old one.
-            HandCenterX = (minX + maxX) * 0.5;
-            pointerCenterHeightAdjustment = (minY + maxY) * 0.5;
+            // Samples arrive in the same frame the rectangle is expressed in, so the midpoint
+            // of the extents is the new centre outright rather than an adjustment to the old one.
+            HandCenterX = (capturedLeft + capturedRight) * 0.5;
+            pointerCenterHeightAdjustment = (capturedTop + capturedBottom) * 0.5;
 
             UseCalibratedRange = true;
+
+            LastResultText = "Calibrated: X " + HandRangeX.ToString("0.00") + " m, Y "
+                + HandRangeY.ToString("0.00") + " m, centre X " + HandCenterX.ToString("+0.00;-0.00")
+                + " m (your centre was " + (capturedCenter.X - HandCenterX).ToString("+0.00;-0.00")
+                + " m off the midpoint)";
             return true;
         }
 
         public void CancelCapture()
         {
-            IsCapturing = false;
-            hasSample = false;
+            if (IsCapturing || IsCaptureComplete)
+            {
+                LastResultText = "Calibration cancelled - previous mapping kept";
+            }
+
+            Step = CalibrationStep.None;
+            ClearHold();
         }
     }
 }

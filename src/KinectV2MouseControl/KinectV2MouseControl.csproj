@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -48,7 +48,13 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />
+    <!-- System.Drawing + System.Windows.Forms: only for the notification-area icon (TrayIcon.cs). -->
+    <Reference Include="System.Drawing" />
+    <!-- System.Speech: the local, in-process voice command recognizer (LocalVoiceEngine.cs). -->
+    <Reference Include="System.Speech" />
+    <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
@@ -65,33 +71,144 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
-    <Compile Include="ViewModels\KinectCursorViewModel.cs" />
-    <Compile Include="Views\RadioCheckedToBoolConverter.cs" />
-    <Page Include="Views\MainWindow.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
     <Compile Include="App.xaml.cs">
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Models\CursorMapper\CursorMapper.cs" />
-    <Compile Include="Models\CursorControlInput\KinectBodyHelper.cs" />
-    <Compile Include="Models\KinectCursor.cs" />
-    <Compile Include="Models\CursorControlInput\KinectReader.cs" />
+    <!-- Theme (merged in App.xaml) -->
+    <Page Include="Themes\Palette.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Themes\Icons.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Themes\Controls.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <!-- Windows -->
+    <Page Include="Views\MainWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Compile Include="Views\MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Page Include="Views\ParameterControl.xaml">
-      <SubType>Designer</SubType>
+    <Page Include="Views\OverlayWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
     </Page>
+    <Compile Include="Views\OverlayWindow.xaml.cs">
+      <DependentUpon>OverlayWindow.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <!-- Controls -->
+    <Page Include="Views\Controls\TuningSlider.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="Views\Controls\TuningSlider.xaml.cs">
+      <DependentUpon>TuningSlider.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="Views\Controls\IconView.cs" />
+    <!-- Pages -->
+    <Page Include="Views\Pages\HomePage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="Views\Pages\HomePage.xaml.cs">
+      <DependentUpon>HomePage.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Page Include="Views\Pages\GesturesPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="Views\Pages\GesturesPage.xaml.cs">
+      <DependentUpon>GesturesPage.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Page Include="Views\Pages\VoicePage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="Views\Pages\VoicePage.xaml.cs">
+      <DependentUpon>VoicePage.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Page Include="Views\Pages\ActionsPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="Views\Pages\ActionsPage.xaml.cs">
+      <DependentUpon>ActionsPage.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Page Include="Views\Pages\DisplaysPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="Views\Pages\DisplaysPage.xaml.cs">
+      <DependentUpon>DisplaysPage.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Page Include="Views\Pages\ProfilesPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="Views\Pages\ProfilesPage.xaml.cs">
+      <DependentUpon>ProfilesPage.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Page Include="Views\Pages\SettingsPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="Views\Pages\SettingsPage.xaml.cs">
+      <DependentUpon>SettingsPage.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Page Include="Views\Pages\AiPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="Views\Pages\AiPage.xaml.cs">
+      <DependentUpon>AiPage.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <!-- View support -->
+    <Compile Include="Views\ControlHelp.cs" />
+    <Compile Include="Views\Converters.cs" />
+    <Compile Include="Views\HelpHub.cs" />
+    <Compile Include="Views\RadioCheckedToBoolConverter.cs" />
+    <Compile Include="Views\TrayIcon.cs" />
+    <Compile Include="Views\WindowBackdrop.cs" />
+    <!-- View models -->
+    <Compile Include="ViewModels\ActionsViewModel.cs" />
+    <Compile Include="ViewModels\DisplaysViewModel.cs" />
+    <Compile Include="ViewModels\KinectCursorViewModel.cs" />
+    <Compile Include="ViewModels\LiveStatus.cs" />
+    <Compile Include="ViewModels\ObservableObject.cs" />
+    <Compile Include="ViewModels\ProfileSlotViewModel.cs" />
+    <Compile Include="ViewModels\ShellViewModel.cs" />
+    <Compile Include="ViewModels\VoiceViewModel.cs" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Engine -->
+    <Compile Include="Models\KinectCursor.cs" />
+    <Compile Include="Models\CursorMapper\CursorMapper.cs" />
     <Compile Include="Models\CursorMapper\MapperStructs.cs" />
     <Compile Include="Models\CursorMapper\OneEuroFilter.cs" />
+    <Compile Include="Models\CursorMapper\StationaryLock.cs" />
+    <Compile Include="Models\CursorMapper\PointerCalibration.cs" />
+    <Compile Include="Models\CursorControlInput\KinectBodyHelper.cs" />
+    <Compile Include="Models\CursorControlInput\KinectReader.cs" />
     <Compile Include="Models\CursorControlInput\HandStateFilter.cs" />
+    <Compile Include="Models\CursorControlInput\PointerStabilizer.cs" />
     <Compile Include="Models\CursorControlOutput\MouseControl.cs" />
     <Compile Include="Models\CursorControlOutput\VirtualScreen.cs" />
     <Compile Include="Models\CursorControlOutput\CursorOutputLoop.cs" />
@@ -99,20 +216,24 @@
     <Compile Include="Models\CursorControlOutput\KeyboardControl.cs" />
     <Compile Include="Models\Actions\ControlAction.cs" />
     <Compile Include="Models\Actions\ActionRouter.cs" />
+    <Compile Include="Models\Actions\ActionCatalog.cs" />
     <Compile Include="Models\Gestures\GestureTuning.cs" />
     <Compile Include="Models\Gestures\GestureContext.cs" />
     <Compile Include="Models\Gestures\GestureDiagnostics.cs" />
     <Compile Include="Models\Gestures\IGestureRecognizer.cs" />
     <Compile Include="Models\Gestures\GestureEngine.cs" />
+    <Compile Include="Models\Gestures\SecondaryClutch.cs" />
     <Compile Include="Models\Gestures\Recognizers\LassoRecognizer.cs" />
     <Compile Include="Models\Gestures\Recognizers\ScrollRecognizer.cs" />
     <Compile Include="Models\Gestures\Recognizers\SwipeRecognizer.cs" />
     <Compile Include="Models\Gestures\Recognizers\ClapRecognizer.cs" />
-    <Compile Include="Models\CursorMapper\StationaryLock.cs" />
-    <Compile Include="Models\CursorMapper\PointerCalibration.cs" />
-    <Compile Include="Views\ParameterControl.xaml.cs">
-      <DependentUpon>ParameterControl.xaml</DependentUpon>
-    </Compile>
+    <Compile Include="Models\Diagnostics\RuntimeLog.cs" />
+    <Compile Include="Models\Diagnostics\ActivityLog.cs" />
+    <Compile Include="Models\Profiles\ProfileStore.cs" />
+    <Compile Include="Models\Voice\VoiceCommand.cs" />
+    <Compile Include="Models\Voice\IVoiceEngine.cs" />
+    <Compile Include="Models\Voice\LocalVoiceEngine.cs" />
+    <Compile Include="Models\Voice\AudioInputDevices.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -141,7 +262,7 @@
     <None Include="app.manifest" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
   </Target>

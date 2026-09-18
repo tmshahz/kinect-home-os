@@ -2,33 +2,49 @@
 
 For the detailed architecture narrative see `CLAUDE.md`, which is the same project seen in
 more depth. This file is the checklist. If code and docs disagree, the code wins. Update the
-docs in the same change.
+docs in the same change. Docs describe current truth; git history is the history.
 
 ## 1. Mission
 
 Turn an Xbox One Kinect (Kinect v2) into a Windows spatial gesture-control system,
 **Kinect Home OS**. The project forked from TangoChen's `KinectV2MouseControl` (MIT, 2018) and
-has been substantially rebuilt:
+has been substantially rebuilt. The control engine is stabilized (hardware status per
+CLAUDE.md §5/§7) and now wears **KINECT-OS**, the control-center UI: shell window with
+acrylic chrome, 8 pages, floating compact widget, tray icon, help drawer, activity feed,
+local voice commands and an action catalog. The UI is compile + offscreen-render verified
+only.
 
 ```
 Kinect body input → body-relative tracking → gesture recognition → semantic actions → Windows control
 ```
 
-Implemented today: smoothed body-relative pointer, grip click/drag, lasso right click,
-second-hand scroll, horizontal swipe window switching, and double-clap control toggle, plus an
-engineering settings/diagnostics window.
-Future (NOT implemented): control-center UI, HUD/overlay, voice, AI/agent commands, more
-gestures, deeper app control.
+Current interaction model:
+- **Right hand = pointer only.** It has to settle briefly before taking the cursor. Fist =
+  press/drag. Lasso = right click.
+- **Left hand = secondary gestures only**, and only while the **left fist is closed (clutch)**.
+  Steady fist, then move up/down = scroll. Fast sideways sweep = switch window. An open left
+  hand does nothing.
+- **Double clap** = control off/on. Tracking keeps running while off.
+
+- **Voice (beta, off by default)** = "Kinect, next window" etc. through the Windows speech
+  recognizer, routed like gestures. **AI** = placeholder section only.
+
+Future (NOT implemented): custom voice commands, the assistant layer, more gestures, "move
+window to display", deeper app control.
 
 ## 2. Toolchain
 
 - Windows 11, Kinect for Windows SDK 2.0 (`KINECTSDK20_DIR=C:\Program Files\Microsoft SDKs\Kinect\v2.0_1409\`)
 - C# / WPF / **.NET Framework 4.8**, **legacy non-SDK csproj**, AnyCPU, Debug + Release
-- Reference: `Microsoft.Kinect` 2.0.0.0 via `$(KINECTSDK20_DIR)Assemblies\Microsoft.Kinect.dll`, `Private=False`
+- References: `Microsoft.Kinect` 2.0.0.0 (`Private=False`), `System.Runtime.Serialization`
+  (profiles JSON), `System.Speech` (voice), `System.Windows.Forms` + `System.Drawing` (tray icon)
 - Build tool: VS 2022 **Preview** MSBuild
 - **Not** a Node/npm/web or `dotnet`-SDK project. No `npm`, no `dotnet build`, no test projects.
+- **UI check without launching:** `bin\Debug\KinectV2MouseControl.exe --ui-smoke-test` (exit 0
+  = pass). Loads every view offscreen, writes `%LOCALAPPDATA%\KinectHomeOS\ui-smoke-test.txt`
+  and `ui-preview\*.png` (read the PNGs). No window, no sensor, no voice, no tray, no log.
 
-### Build (both must pass)
+### Build (both must pass, target 0 errors / 0 warnings)
 
 PowerShell:
 ```powershell
@@ -38,86 +54,125 @@ PowerShell:
 
 Git Bash (dash-style switches, because MSYS mangles `/p:`):
 ```bash
-"/c/Program Files/Microsoft Visual Studio/2022/Preview/MSBuild/Current/Bin/MSBuild.exe" src/KinectV2MouseControl.sln -t:Build -p:Configuration=Debug -v:minimal -nologo
-"/c/Program Files/Microsoft Visual Studio/2022/Preview/MSBuild/Current/Bin/MSBuild.exe" src/KinectV2MouseControl.sln -t:Build -p:Configuration=Release -v:minimal -nologo
+"/c/Program Files/Microsoft Visual Studio/2022/Preview/MSBuild/Current/Bin/MSBuild.exe" src/KinectV2MouseControl.sln -t:Build -p:Configuration=Debug -v:minimal -nologo -clp:Summary
+"/c/Program Files/Microsoft Visual Studio/2022/Preview/MSBuild/Current/Bin/MSBuild.exe" src/KinectV2MouseControl.sln -t:Build -p:Configuration=Release -v:minimal -nologo -clp:Summary
 ```
 
 - `-t:Rebuild` for a guaranteed fresh output.
-- MSB3027/MSB3021 "file locked" means the exe is running. Ask the user to close it. Don't kill it.
+- MSB3027/MSB3021 "file locked" means the exe is running. Ask the user to close it.
+- **Do not launch the exe without asking.** It takes over the user's real cursor if they are in
+  front of the sensor.
 
 ### Executables
 
 - Debug: `C:\Users\taimu\Cursor\KinectV2MouseControl\src\KinectV2MouseControl\bin\Debug\KinectV2MouseControl.exe`
 - Release: `C:\Users\taimu\Cursor\KinectV2MouseControl\src\KinectV2MouseControl\bin\Release\KinectV2MouseControl.exe`
-- `executables/KinectV2MouseControl_EXE.zip` = upstream's 2018 binary. It is historical, not current.
+- `executables/KinectV2MouseControl_EXE.zip` = upstream's 2018 binary. It is historical.
 - `bin/` and `obj/` are git-ignored. **Never commit exes or build output.**
+
+### Runtime files
+
+- `user.config` (last-used settings): `%LOCALAPPDATA%\KinectV2MouseControl\...exe_Url_<hash>\1.2.1.0\`
+  - it is **per exe path**;
+  - it is saved on normal close only.
+- Profiles: `%LOCALAPPDATA%\KinectHomeOS\profiles.json`
+  - 3 slots, shared by Debug and Release;
+  - atomic write;
+  - an unreadable file is moved to `.bad`.
+- Runtime log: `%LOCALAPPDATA%\KinectHomeOS\runtime.log` (previous launch in `runtime.prev.log`)
+  - records sensor availability, body lock, pointer sessions (with dt/noise/glitch stats),
+    resets, clutch, calibration and profiles;
+  - ask the user for it when diagnosing intermittent problems.
 
 ## 3. Code map (`src/KinectV2MouseControl/`)
 
 | File | Responsibility |
 |---|---|
-| `Models/KinectCursor.cs` | Orchestrator. Body-frame handler, activation zone, controlling-hand latch, pointer path, grip/click/drag + click anchoring, hover timer, stall watchdog, control gate (`IControlGate`), calibration glue, display-change handling, diagnostics fill, all reset paths |
-| `Models/CursorControlInput/KinectReader.cs` | Opens/closes sensor. Locks onto the first tracked body. Raises `OnTrackedBody` (with sensor timestamp) / `OnLostTracking` after >5 missing frames |
-| `Models/CursorControlInput/KinectBodyHelper.cs` | SpineBase-relative hand position, forward distance, joint weight (1 / 0.35 inferred / 0), hand state + confidence, pointer-frame offsets (±0.185 m X, −PointerCenterHeight Y) |
-| `Models/CursorControlInput/HandStateFilter.cs` | Grip debounce: press 0.08 s (confident only), release 0.12 s, pending timeout 0.5 s, `IsPressPending` for pre-press anchoring |
-| `Models/CursorMapper/CursorMapper.cs` | Input rect → virtual desktop (`MoveScale × AlignScale`), One Euro filter, jitter dead zone |
-| `Models/CursorMapper/OneEuroFilter.cs` | `LowPassFilter`, `OneEuroVectorFilter` |
-| `Models/CursorMapper/StationaryLock.cs` | Absolute lock: dwell/radius to lock, breakout radius/speed to unlock, decaying release |
-| `Models/CursorMapper/PointerCalibration.cs` | Opt-in per-axis hand range (`ScaleAlignment.Both`) + sweep capture |
-| `Models/CursorMapper/MapperStructs.cs` | `MRect`, `MVector2` |
-| `Models/CursorControlOutput/CursorOutputLoop.cs` | Background ~125 Hz thread. **Sole `SetCursorPos` caller.** τ 15 ms ease, write-on-change, snap after `ClearTarget` |
-| `Models/CursorControlOutput/MouseControl.cs` | SendInput buttons/wheel, `SetCursorPos` wrapper |
-| `Models/CursorControlOutput/KeyboardControl.cs` | Alt+Tab / Shift+Alt+Tab as single SendInput batches |
-| `Models/CursorControlOutput/Win32Input.cs` | SendInput INPUT union/constants |
-| `Models/CursorControlOutput/VirtualScreen.cs` | Virtual desktop bounds in physical px (needs DPI-aware manifest) |
-| `Models/Actions/ControlAction.cs` | `ControlActionType` (LeftMouseDown/Up, LeftClick, RightClick, Scroll, NextWindow, PreviousWindow, ToggleControl), `ControlAction` struct, `IActionSink`, `IControlGate` |
-| `Models/Actions/ActionRouter.cs` | Discrete action → Win32. Scroll remainder accumulation. ToggleControl → gate |
-| `Models/Gestures/GestureContext.cs` | `HandSnapshot` + reused per-frame `GestureContext` |
-| `Models/Gestures/GestureEngine.cs` | Priority: Clap (always) → gate/idle → vocabulary check (GripToPress only) → Lasso → Swipe → Scroll |
-| `Models/Gestures/GestureTuning.cs` | All gesture/activation thresholds |
-| `Models/Gestures/Recognizers/*.cs` | `ClapRecognizer`, `LassoRecognizer`, `ScrollRecognizer`, `SwipeRecognizer` |
-| `Models/Gestures/GestureDiagnostics.cs`, `IGestureRecognizer.cs` | Readout model; recognizer contract + `GestureState` |
-| `ViewModels/KinectCursorViewModel.cs` | Bindings, Load/Save settings, `DEFAULT_*` + ResetToDefault, 200 ms diagnostics timer, `Quit` |
-| `Views/MainWindow.xaml(.cs)` | 18 parameter sliders, 6 mode radios, lock/calibrated checkboxes, Calibrate/Finish, diagnostics panel, Default |
-| `Properties/Settings.settings` + `Settings.Designer.cs`, `App.config` | Persisted user settings + defaults |
-| `app.manifest` | PerMonitorV2 DPI awareness |
-| `KinectV2MouseControl.csproj` | **Every new `.cs` file must be added to `<Compile Include>`** |
+| `Models/KinectCursor.cs` | Orchestrator. Frame handler, activation zone, **right-hand-only pointer session**, grip/click/drag + anchoring, left-hand clicking for legacy two-hand modes, hover, stall watchdog, control gate, calibration glue, display changes, `ApplySettings` batches, diagnostics, all reset paths |
+| `Models/CursorControlInput/KinectReader.cs` | Sensor open/close/availability. Scored body lock (≥3/6 core joints Tracked, nearest). Degraded-body switch. `OnTrackedBody` / `OnLostTracking` |
+| `Models/CursorControlInput/PointerStabilizer.cs` | Waiting → Stabilizing → Active, settle time/frames, glitch skip / destabilize, seed position |
+| `Models/CursorControlInput/KinectBodyHelper.cs` | SpineBase-relative geometry, joint weights/states, hand state + confidence |
+| `Models/CursorControlInput/HandStateFilter.cs` | Open/closed debounce (grip; reused by the clutch) |
+| `Models/CursorMapper/CursorMapper.cs` | Mapping, pre-filter monitor clamp, One Euro, **soft** jitter dead zone, `SeedSmoothing`, `ResidualNoise` |
+| `Models/CursorMapper/OneEuroFilter.cs` | `LowPassFilter`, `OneEuroVectorFilter` (+`Seed`) |
+| `Models/CursorMapper/StationaryLock.cs` | Absolute lock with hysteresis and decaying release |
+| `Models/CursorMapper/PointerCalibration.cs` | Calibrated per-axis range + **guided 5-point capture** (centre/left/right/top/bottom, 5% edge assist) |
+| `Models/CursorControlOutput/CursorOutputLoop.cs` | Background ~125 Hz thread. **Sole `SetCursorPos` caller** |
+| `Models/CursorControlOutput/MouseControl.cs` | SendInput buttons/wheel, `SetCursorPos` wrapper, `ReleaseIfInjected` fail-safe |
+| `Models/CursorControlOutput/VirtualScreen.cs` | `VirtualScreen` bounds + monitor rects. `DesktopLayout.Clamp` (nearest real monitor) |
+| `Models/CursorControlOutput/KeyboardControl.cs`, `Win32Input.cs` | Alt+Tab chords; SendInput plumbing |
+| `Models/Actions/ControlAction.cs`, `ActionRouter.cs` | Semantic actions → Win32 (discrete-action boundary). `Execute(action, source)`; window-management, media, control on/off and `LaunchApp` actions |
+| `Models/Actions/ActionCatalog.cs` | Human-readable action index (implemented vs planned) for the Actions page and the voice grammar |
+| `Models/Voice/*.cs` | `VoiceCommand` + built-in catalog, `IVoiceEngine`, `LocalVoiceEngine` (System.Speech, closed grammar, wake word), `AudioInputDevices` |
+| `Models/Diagnostics/ActivityLog.cs` | In-memory recent-activity feed (coalescing) shown on Home/Settings |
+| `ViewModels/ShellViewModel.cs` | Navigation, help drawer, compact/tray requests, activity collection, UI settings, commands |
+| `ViewModels/LiveStatus.cs` | Bindable engine snapshot (ControlState Off/Standby/Ready/Active, hands, gestures, signal, calibration) |
+| `ViewModels/VoiceViewModel.cs`, `ActionsViewModel.cs`, `DisplaysViewModel.cs`, `ProfileSlotViewModel.cs` | Page view models |
+| `Views/MainWindow.xaml(.cs)` | KINECT-OS shell: WindowChrome + acrylic (`WindowBackdrop`), rail, header pills, page host, help drawer, compact mode, tray |
+| `Views/OverlayWindow.xaml(.cs)` | Floating compact widget |
+| `Views/Pages/*.xaml` | Home, Gestures, Voice, Actions, Displays, Profiles, Settings, AiPage |
+| `Views/Controls/TuningSlider`, `IconView.cs` | Labelled slider with help glyph; vector icon control |
+| `Views/ControlHelp.cs`, `HelpHub.cs` | Help text single source; hover/pin routing to the drawer |
+| `Themes/Palette.xaml`, `Icons.xaml`, `Controls.xaml` | Visual identity, icon geometries, all shared styles/converters |
+| `Models/Gestures/GestureEngine.cs` | Priority: Clap → gate/idle → vocabulary (GripToPress only) → Lasso → **Clutch** → Swipe → Scroll |
+| `Models/Gestures/SecondaryClutch.cs` | Left-fist clutch → `SecondaryGestureArmed` |
+| `Models/Gestures/GestureContext.cs` | `HandSnapshot`, per-frame context, `PointerHand`/`SecondaryHand` constants, `IsSecondaryGestureArmed` |
+| `Models/Gestures/GestureTuning.cs` | All thresholds: activation, lasso, clutch, scroll, swipe, clap, stabilization, lock |
+| `Models/Gestures/Recognizers/*.cs` | Clap, Lasso, Scroll (steady-neutral + curve), Swipe (clutch-gated) |
+| `Models/Diagnostics/RuntimeLog.cs` | Event log |
+| `Models/Profiles/ProfileStore.cs` | `TuningProfile` (nullable members), slots, JSON store |
+| `ViewModels/KinectCursorViewModel.cs` | Engine settings, Load/Save, defaults, profiles (+modified tracking, rename persists), calibration, `IsControlEnabled`, `ExecuteAction`, `LiveStatus` refresh, `Quit` |
+| `Views/RadioCheckedToBoolConverter.cs` | Mode chips; `ConvertBack` must return `Binding.DoNothing` for unchecked |
+| `App.xaml.cs` | Merges themes, creates the window, `--ui-smoke-test`, crash / session-end / process-exit mouse release |
+| `Properties/Settings.*`, `App.config` | Persisted settings + defaults |
 
-Control modes (`KinectCursor.ControlMode`): Disabled, MoveOnly, GripToPress (default and the
-only mode with lasso/scroll/swipe), HoverToClick, MoveGripPressing, MoveLiftClicking. Double
-clap works in every mode except Disabled.
-
-Threads: body frames and DispatcherTimers run on the WPF UI thread. Only `CursorOutputLoop` runs
-on its own thread.
+Control modes: Disabled, MoveOnly, GripToPress (default; the only mode with lasso/clutch/
+scroll/swipe), HoverToClick, MoveGripPressing and MoveLiftClicking (the left hand clicks while
+the right points). Double clap works in every mode except Disabled.
 
 ## 4. Engineering invariants (non-negotiable)
 
 1. Single cursor-position writer: only `CursorOutputLoop` moves the cursor.
 2. Never write the cursor from the Kinect body-frame handler. Publish a target instead.
-3. Keep the high-rate output architecture (thread, time-based ease, write-on-change,
-   `ClearTarget` hands back the mouse, `UpdateOutputLoopState` is the one start/stop decision).
-4. Don't casually rewrite the working filter/click pipeline:
-   One Euro → jitter dead zone → stationary lock → click freeze/anchor → clamp → output loop,
+3. Keep the high-rate output architecture (thread, ease, write-on-change, `ClearTarget`,
+   `UpdateOutputLoopState` as the single start/stop decision).
+4. Don't casually rewrite the filter/click pipeline:
+   `clamp → One Euro → soft dead zone → stationary lock → click freeze/anchor → clamp → output loop`,
    plus `HandStateFilter`. It is hardware-tuned.
-5. No injected mouse-down may survive tracking loss, control disable, sensor stall, app
-   shutdown, display reconfiguration, hand handoff, mode change, calibration, or any
-   equivalent teardown. `ReleaseAllGrips()` goes before `ResetControlState()`.
-6. Recognizers emit `ControlAction`s via `IActionSink`. No direct Win32/cursor calls.
-7. `ActionRouter` is the reusable discrete-action boundary for gesture, voice and agent inputs.
-   Pointer movement stays out of it.
-8. Double-clap disable must keep the sensor and body tracking running so another clap can
-   re-enable control. Only `Mode = Disabled` closes the sensor. Clap stays above the gate in
-   engine priority.
-9. Preserve body-relative (SpineBase) tracking.
-10. Recognizers write state before emitting. Never retain `GestureContext`. No per-frame allocations.
-11. Keep DPI awareness + physical-pixel virtual-desktop mapping. `SetCursorPos`, not SendInput absolute.
-12. Use real sensor `deltaTime`. Never assume 30 Hz.
-13. Uncalibrated mapping stays identical to the original. Calibration is opt-in.
-14. No broad refactors for cleanliness. No framework migration. No UI redesign unless asked.
-15. Don't rename the exe/assembly or bump AssemblyVersion without telling the user, because
-    it orphans their `user.config`.
-16. Keep the upstream MIT license notice.
-17. Never describe hardware behaviour as verified because it compiles.
+5. No injected mouse-down may survive any teardown: tracking loss, sensor unavailable, stall,
+   control disable, mode change, calibration, profile load/defaults, display change, session
+   end/glitch destabilize, app exit, crash. `ReleaseAllGrips()` goes before `ResetControlState()`.
+6. Fixed hand roles: right = pointer (the only hand that can own/anchor the cursor), left =
+   secondary. No first-activated-hand logic, no handoff, no left fallback.
+7. Secondary gestures only via `SecondaryGestureArmed` (the clutch). Don't scatter left-hand
+   `Closed` checks.
+8. Every pointer session goes through `PointerStabilizer` + `SeedSmoothing`. All teardowns
+   reset it.
+9. Recognizers emit `ControlAction`s via `IActionSink`, write state before emitting, and make
+   no Win32/cursor calls.
+10. `ActionRouter` is the discrete-action boundary for gesture, voice and agent inputs. Pointer
+    movement stays out.
+11. Double-clap disable keeps the sensor and body tracking running. Only `Mode = Disabled`
+    closes the sensor. The clap stays above the gate.
+12. Preserve body-relative (SpineBase) tracking.
+13. Never retain `GestureContext`. No per-frame allocations.
+14. DPI awareness + physical-pixel `DesktopLayout`. `SetCursorPos`, not SendInput absolute.
+    No primary-monitor assumptions.
+15. Use real sensor `deltaTime`.
+16. Uncalibrated mapping geometry stays the original. Calibrated mode ignores MoveScale.
+17. Settings batches go through `KinectCursor.ApplySettings`.
+18. No broad refactors, framework migration, or frontend redesign unless asked.
+19. Don't rename the exe/assembly or bump AssemblyVersion without telling the user.
+20. Keep the upstream MIT license notice.
+21. Never describe hardware behaviour as verified because it compiles.
+22. The UI never touches the engine directly: views bind to view models, control changes go
+    through `KinectCursorViewModel`.
+23. `ActionRouter.Execute` on the UI thread only; voice marshals through the Dispatcher.
+24. Voice/AI use the `ControlAction` vocabulary and the catalog; they never move the pointer.
+25. `ControlHelp` is the only source of help text; new controls get an entry (`HelpKey` =
+    title). WPF binds to properties, not fields.
+26. The smoke test never shows a window, opens the sensor, starts voice, creates the tray
+    icon or writes `runtime.log`.
 
 ## 5. Change protocol (every task)
 
@@ -126,46 +181,54 @@ on its own thread.
 3. Preserve working functionality unless the task explicitly changes it.
 4. No unrelated refactors.
 5. Make the smallest coherent implementation that matches the surrounding style: C# 7,
-   explicit braces, long-form properties, and explanatory `///` comments that give the *why*.
+   explicit braces, long-form properties, and `///` comments that give the *why*.
 6. Build **Debug**.
 7. Build **Release**.
-8. Report errors **and** warnings.
+8. Report errors **and** warnings (target 0/0). For any XAML/view change also run
+   `--ui-smoke-test` and look at the previews.
 9. List every source file changed.
 10. Give the exact executable paths (§2). The fresh `bin\Debug` / `bin\Release` outputs are the
-    current test builds. Don't accumulate copied test exes unless a comparison build is useful.
+    current test builds.
 11. Spell out what specifically needs physical Kinect testing.
-12. Label status **COMPILE VERIFIED** vs **HARDWARE VERIFIED**. Only the user's physical test
-    makes something hardware verified.
+12. Label status **COMPILE VERIFIED** vs **HARDWARE VERIFIED**.
 
-Loop: `code → build Debug+Release → new exe → user physical test → feedback → next change`.
+Adding a tuning setting touches:
+- `Settings.settings`, `Settings.Designer.cs`, `App.config`;
+- `KinectCursorViewModel`: property, `TuningProperties`, Load, Save, `DEFAULT_*`/ResetToDefault,
+  Capture/ApplyProfile;
+- `TuningProfile`;
+- a `TuningSlider` on GesturesPage (advanced tuning) or DisplaysPage (range values);
+- a `ControlHelp` entry whose Title equals the slider's `HelpKey`/label.
 
-Adding a setting touches: `Settings.settings`, `Settings.Designer.cs`, `App.config`, ViewModel
-(property, LoadSettings, SaveSettings, `DEFAULT_*`, ResetToDefault), `MainWindow.xaml`.
-Settings save only on normal window close. `user.config` is stored **per exe path**, so Debug
-and Release keep separate tuned values.
+Adding a UI-only setting: the three settings files + `ShellViewModel` property +
+`LoadUiSettings`/`SaveUiSettings` + a toggle on SettingsPage + `ControlHelp` entry.
+
+Adding an action: `ControlActionType` + `ActionRouter` case (+ `KeyboardControl` chord) +
+`ActionCatalog` descriptor (+ `VoiceCommandCatalog` phrase, `ControlAction.Describe`).
+
+New `.cs` → csproj `<Compile Include>`; new `.xaml` → `<Page Include>` + `DependentUpon`.
 
 ## 6. Regression checklist (input/pointer/gesture changes)
 
-Reason through each of these, and list the relevant ones for the user to test physically:
-
-- [ ] Pointer smoothness (slow aim, fast sweep, no 30 Hz stepping)
-- [ ] Stationary lock engages/breaks cleanly, no snap on release
-- [ ] Click anchoring (cursor pinned while fist closes, no jump after freeze)
-- [ ] Grip click (no spurious clicks from flicker/low confidence)
-- [ ] Drag (holds through noisy frames, anchored to clicked spot)
+- [ ] Pointer smoothness (slow aim, fast sweep, no 30 Hz stepping, no dead-zone hops)
+- [ ] Startup: clean single snap after settle, no jump/jitter burst, repeated launches
+- [ ] Reacquisition after lowering the right hand / tracking loss re-stabilizes cleanly
+- [ ] Right hand exclusively points; left hand never becomes the pointer
+- [ ] Stationary lock engages/breaks cleanly
+- [ ] Click anchoring, click freeze, grip click, drag
 - [ ] Lasso right click (one per gesture, not during drag)
-- [ ] Secondary-hand scroll (arming, neutral, direction, rate, stop)
-- [ ] Swipe (both directions, no reverse on return stroke, not during drag, not from clapping)
-- [ ] Double clap (toggles both ways, no false positives, works while dragging and releases the drag)
-- [ ] Control enable/disable (tracking continues while disabled, UI mode selection re-enables)
-- [ ] Tracking loss (button released, cursor handed back)
-- [ ] Frame stall / sensor unplug (≥ 1 s watchdog releases)
-- [ ] Hand / control-session changes (handoff releases, no carried-over gestures)
-- [ ] Stuck mouse button prevention on every teardown path
-- [ ] Calibration (sweep, finish, rejected tiny sweep, calibrated vs uncalibrated mapping, MoveScale interaction)
-- [ ] Virtual desktop / dual-monitor mapping (edges reachable, negative origins, display change)
+- [ ] Left open hand does nothing; left fist arms the clutch; releasing stops everything
+- [ ] Scroll: settle, neutral, direction, curve, invert, stop on release, no burst on close-while-moving
+- [ ] Swipe: only with clutch, both directions, cooldown, no reverse on return, not during drag, not from clapping
+- [ ] Double clap toggles both ways, keeps tracking, releases a drag
+- [ ] Tracking loss / sensor unplug / stall: button released, cursor handed back
+- [ ] Mode change / profile load / Default / calibration / display change: no stuck button
+- [ ] Calibration: guided capture, cancel, rejection, four-corner reach, revert by unticking
+- [ ] Virtual desktop / dual-monitor mapping, including mismatched monitor sizes and negative origins
 
 ## 7. Hardware-tested reference configuration (user-reported; preferences, not defaults)
+
+These were tested **before** the soft dead zone and clutch changes. Re-validate them.
 
 ```
 Movement Scale:           ~0.50 in latest testing
@@ -183,23 +246,29 @@ Hover-to-click Duration:    2.0 s
 Stationary Lock Dwell:     ~0.23 s
 ```
 
-Code defaults differ (e.g. MoveScale 1, Smoothing 0.2 in settings / 0.7 via Default button,
-JitterDeadzone 3, ClickFreeze 0.15, PointerHeight 0.5, ActivationHeight 0.25, LockDwell 0.35).
-Don't change defaults to these values unless asked. See `CLAUDE.md` §7 for the full list and
-hardware findings. Hardware tip: on Windows 11, Kinect microphone audio enhancements caused
-repeated sensor disconnect/reconnect. Disabling them fixed it.
+Code defaults differ (see `CLAUDE.md` §7). Don't change defaults to match these unless asked.
 
-## 8. Current backlog (not implemented)
+Hardware tip: on Windows 11, Kinect microphone audio enhancements caused repeated sensor
+disconnect/reconnect. Disabling them fixed it. It shows as repeated "Sensor UNAVAILABLE" lines
+in `runtime.log`.
 
-1. **Dedicated hand roles.** Right hand = pointer only. Left hand = secondary/modifier only.
-   The left hand must never become the pointer when the right is lowered. (Today: first
-   activated hand wins, right checked first.)
-2. **Left-hand clutch.** Open left hand is passive. A closed left fist engages the clutch.
-   Scroll and horizontal swipe only while the fist is held. Releasing ends/resets the gesture.
-   (Today: scroll arms on a steady-dwell with no fist requirement.)
-3. **Scroll refinement.** Rebuild secondary-hand scroll around the clutch, because the current
-   one feels over-sensitive.
-4. **Calibration.** Comfortable full dual-monitor reach without exaggerated arm movement.
+## 8. Current backlog
 
-Known code-audit gaps are listed in `CLAUDE.md` §10 (e.g. active-to-active mode change
-releases grips only on the next frame; no crash-time mouse-up handler).
+1. **Hardware validation of the current phase.** Everything below is COMPILE VERIFIED only:
+   - fixed hand roles;
+   - left-fist clutch;
+   - clutch-based scroll (steady neutral, curve, invert) and swipe;
+   - soft dead zone;
+   - startup stabilization / glitch rejection;
+   - body selection;
+   - guided calibration + edge assist + nearest-monitor clamp;
+   - profiles, help, runtime log;
+   - mode-radio converter fix.
+2. **Validate the KINECT-OS UI on the real machine:** acrylic/custom chrome (drag, snap,
+   maximize, cross-monitor DPI), compact mode + widget position, tray menu, live cards while
+   pointing, calibration progress UI, voice with the Kinect mic (watch for sensor reconnects),
+   the new routed actions, profile rename persistence.
+3. Expose clutch timings / scroll dead zone in the UI only if hardware testing shows per-user
+   tuning is needed.
+4. Smoothing default mismatch (Settings 0.2 vs Default button 0.7).
+5. Custom voice commands, `LaunchApp` targets, "move window to display", the assistant layer.

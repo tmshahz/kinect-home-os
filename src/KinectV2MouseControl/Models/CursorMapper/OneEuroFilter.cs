@@ -163,8 +163,23 @@ namespace KinectV2MouseControl
         }
 
         /// <summary>
+        /// Starts the filter at a known position with zero velocity, as if it had been resting
+        /// there. Used to begin a pointer session from an averaged, validated position.
+        /// </summary>
+        public void Seed(MVector2 value)
+        {
+            Reset();
+            xFilter.Filter(value.X, 1);
+            yFilter.Filter(value.Y, 1);
+            dxFilter.Filter(0, 1);
+            dyFilter.Filter(0, 1);
+            lastRawValue = value;
+            hasRawValue = true;
+        }
+
+        /// <summary>
         /// Drops all history so the next sample is taken as-is instead of being blended with
-        /// a stale position. Call on tracking loss, hand changes and disable/re-enable.
+        /// a stale position. Call on tracking loss, session changes and disable/re-enable.
         /// </summary>
         public void Reset()
         {

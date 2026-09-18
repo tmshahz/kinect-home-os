@@ -274,5 +274,125 @@ namespace KinectV2MouseControl.Properties {
                 this["HandCenterX"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("1.5")]
+        public double ScrollCurve {
+            get {
+                return ((double)(this["ScrollCurve"]));
+            }
+            set {
+                this["ScrollCurve"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool InvertScroll {
+            get {
+                return ((bool)(this["InvertScroll"]));
+            }
+            set {
+                this["InvertScroll"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.25")]
+        public double PointerSettleTime {
+            get {
+                return ((double)(this["PointerSettleTime"]));
+            }
+            set {
+                this["PointerSettleTime"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool CompactOnMinimize {
+            get {
+                return ((bool)(this["CompactOnMinimize"]));
+            }
+            set {
+                this["CompactOnMinimize"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool StartCompact {
+            get {
+                return ((bool)(this["StartCompact"]));
+            }
+            set {
+                this["StartCompact"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool OverlayAlwaysOnTop {
+            get {
+                return ((bool)(this["OverlayAlwaysOnTop"]));
+            }
+            set {
+                this["OverlayAlwaysOnTop"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("-1")]
+        public double OverlayLeft {
+            get {
+                return ((double)(this["OverlayLeft"]));
+            }
+            set {
+                this["OverlayLeft"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("-1")]
+        public double OverlayTop {
+            get {
+                return ((double)(this["OverlayTop"]));
+            }
+            set {
+                this["OverlayTop"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool VoiceEnabled {
+            get {
+                return ((bool)(this["VoiceEnabled"]));
+            }
+            set {
+                this["VoiceEnabled"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Kinect")]
+        public string VoiceWakeWord {
+            get {
+                return ((string)(this["VoiceWakeWord"]));
+            }
+            set {
+                this["VoiceWakeWord"] = value;
+            }
+        }
     }
 }

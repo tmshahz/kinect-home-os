@@ -28,6 +28,19 @@ namespace KinectV2MouseControl
         public const ushort VK_SHIFT = 0x10;
         public const ushort VK_MENU = 0x12;
         public const ushort VK_TAB = 0x09;
+        public const ushort VK_LWIN = 0x5B;
+        public const ushort VK_LEFT = 0x25;
+        public const ushort VK_UP = 0x26;
+        public const ushort VK_RIGHT = 0x27;
+        public const ushort VK_DOWN = 0x28;
+        public const ushort VK_D = 0x44;
+        public const ushort VK_F4 = 0x73;
+        public const ushort VK_VOLUME_MUTE = 0xAD;
+        public const ushort VK_VOLUME_DOWN = 0xAE;
+        public const ushort VK_VOLUME_UP = 0xAF;
+        public const ushort VK_MEDIA_NEXT_TRACK = 0xB0;
+        public const ushort VK_MEDIA_PREV_TRACK = 0xB1;
+        public const ushort VK_MEDIA_PLAY_PAUSE = 0xB3;
 
         /// <summary>
         /// One notch of the mouse wheel, as defined by WHEEL_DELTA.

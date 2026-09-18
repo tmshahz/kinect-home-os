@@ -1,0 +1,84 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- KINECT-OS palette. Deep graphite-navy base with a single holographic blue accent.
+         Surfaces are translucent whites so the acrylic backdrop (see WindowBackdrop) and the
+         base gradient show through; nothing here is opaque except the fallback backdrop. -->
+
+    <FontFamily x:Key="Font.UI">Segoe UI Variable Display, Segoe UI, Arial</FontFamily>
+    <FontFamily x:Key="Font.Text">Segoe UI Variable Text, Segoe UI, Arial</FontFamily>
+    <FontFamily x:Key="Font.Mono">Cascadia Mono, Consolas, Courier New</FontFamily>
+
+    <Color x:Key="Color.Accent">#FF4FC3FF</Color>
+    <Color x:Key="Color.AccentDeep">#FF2F80FF</Color>
+    <Color x:Key="Color.Success">#FF3DDC97</Color>
+    <Color x:Key="Color.Warning">#FFFFC857</Color>
+    <Color x:Key="Color.Danger">#FFFF6B85</Color>
+    <Color x:Key="Color.Text">#FFEEF4FB</Color>
+    <Color x:Key="Color.Base">#FF0B1220</Color>
+
+    <!-- Backdrop: opaque fallback when the DWM acrylic is unavailable, translucent when it is. -->
+    <LinearGradientBrush x:Key="Brush.BackdropOpaque" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FF0A1120" Offset="0"/>
+        <GradientStop Color="#FF0D1A2E" Offset="0.55"/>
+        <GradientStop Color="#FF0A1424" Offset="1"/>
+    </LinearGradientBrush>
+    <SolidColorBrush x:Key="Brush.BackdropGlass" Color="#B80A1220"/>
+
+    <!-- Soft light bloom in the corner, purely decorative. -->
+    <RadialGradientBrush x:Key="Brush.Bloom" Center="0.15,0.05" GradientOrigin="0.15,0.05" RadiusX="0.7" RadiusY="0.9">
+        <GradientStop Color="#2E2F80FF" Offset="0"/>
+        <GradientStop Color="#0A4FC3FF" Offset="0.45"/>
+        <GradientStop Color="#00000000" Offset="1"/>
+    </RadialGradientBrush>
+
+    <SolidColorBrush x:Key="Brush.Base" Color="#FF0B1220"/>
+    <SolidColorBrush x:Key="Brush.Rail" Color="#33060B16"/>
+    <SolidColorBrush x:Key="Brush.Header" Color="#00000000"/>
+
+    <SolidColorBrush x:Key="Brush.Surface" Color="#12FFFFFF"/>
+    <SolidColorBrush x:Key="Brush.SurfaceHover" Color="#1EFFFFFF"/>
+    <SolidColorBrush x:Key="Brush.SurfaceStrong" Color="#1CFFFFFF"/>
+    <SolidColorBrush x:Key="Brush.SurfaceInset" Color="#2A060B16"/>
+    <SolidColorBrush x:Key="Brush.SurfaceBorder" Color="#22FFFFFF"/>
+    <SolidColorBrush x:Key="Brush.SurfaceBorderStrong" Color="#3AFFFFFF"/>
+    <SolidColorBrush x:Key="Brush.Divider" Color="#16FFFFFF"/>
+
+    <SolidColorBrush x:Key="Brush.Accent" Color="#FF4FC3FF"/>
+    <SolidColorBrush x:Key="Brush.AccentDeep" Color="#FF2F80FF"/>
+    <SolidColorBrush x:Key="Brush.AccentSoft" Color="#334FC3FF"/>
+    <SolidColorBrush x:Key="Brush.AccentFaint" Color="#184FC3FF"/>
+    <SolidColorBrush x:Key="Brush.AccentGlow" Color="#8C4FC3FF"/>
+    <LinearGradientBrush x:Key="Brush.AccentGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FF4FC3FF" Offset="0"/>
+        <GradientStop Color="#FF2F80FF" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Brush.AccentLine" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#004FC3FF" Offset="0"/>
+        <GradientStop Color="#FF4FC3FF" Offset="0.5"/>
+        <GradientStop Color="#004FC3FF" Offset="1"/>
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="Brush.Text" Color="#FFEEF4FB"/>
+    <SolidColorBrush x:Key="Brush.TextDim" Color="#FFB4C2D6"/>
+    <SolidColorBrush x:Key="Brush.TextMuted" Color="#FF7F91AB"/>
+    <SolidColorBrush x:Key="Brush.TextFaint" Color="#FF56677F"/>
+    <SolidColorBrush x:Key="Brush.TextOnAccent" Color="#FF061018"/>
+
+    <SolidColorBrush x:Key="Brush.Success" Color="#FF3DDC97"/>
+    <SolidColorBrush x:Key="Brush.SuccessSoft" Color="#2E3DDC97"/>
+    <SolidColorBrush x:Key="Brush.Warning" Color="#FFFFC857"/>
+    <SolidColorBrush x:Key="Brush.WarningSoft" Color="#2EFFC857"/>
+    <SolidColorBrush x:Key="Brush.Danger" Color="#FFFF6B85"/>
+    <SolidColorBrush x:Key="Brush.DangerSoft" Color="#2EFF6B85"/>
+    <SolidColorBrush x:Key="Brush.Neutral" Color="#FF56677F"/>
+    <SolidColorBrush x:Key="Brush.NeutralSoft" Color="#2256677F"/>
+
+    <!-- Glows are DropShadowEffects with no offset; used sparingly on live indicators. -->
+    <DropShadowEffect x:Key="Effect.AccentGlow" Color="#FF4FC3FF" BlurRadius="18" ShadowDepth="0" Opacity="0.75"/>
+    <DropShadowEffect x:Key="Effect.AccentGlowSoft" Color="#FF4FC3FF" BlurRadius="26" ShadowDepth="0" Opacity="0.35"/>
+    <DropShadowEffect x:Key="Effect.SuccessGlow" Color="#FF3DDC97" BlurRadius="16" ShadowDepth="0" Opacity="0.8"/>
+    <DropShadowEffect x:Key="Effect.CardShadow" Color="#FF000000" BlurRadius="30" ShadowDepth="8" Direction="270" Opacity="0.35"/>
+    <DropShadowEffect x:Key="Effect.WidgetShadow" Color="#FF000000" BlurRadius="28" ShadowDepth="6" Direction="270" Opacity="0.55"/>
+
+</ResourceDictionary>

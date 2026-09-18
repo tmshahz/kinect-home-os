@@ -1,0 +1,43 @@
+<UserControl x:Class="KinectV2MouseControl.TuningSlider"
+             x:Name="Root"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:KinectV2MouseControl"
+             MouseEnter="Root_MouseEnter">
+    <Grid Margin="0,4,0,6">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding Label, ElementName=Root}"
+                   Style="{StaticResource Text.Body}" VerticalAlignment="Center"/>
+
+        <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBox x:Name="ValueBox" Style="{StaticResource TextBox.Value}"
+                     Text="{Binding Value, ElementName=Root, Mode=TwoWay, StringFormat=\{0:0.###\}, UpdateSourceTrigger=LostFocus}"
+                     KeyDown="ValueBox_KeyDown"/>
+            <TextBlock Text="{Binding Unit, ElementName=Root}" Style="{StaticResource Text.Caption}"
+                       Margin="6,0,0,0" VerticalAlignment="Center" MinWidth="18"/>
+        </StackPanel>
+
+        <Button Grid.Row="0" Grid.Column="2" Style="{StaticResource Button.Help}" Margin="6,0,0,0"
+                Click="Help_Click" ToolTip="What does this do?">
+            <local:IconView Icon="{StaticResource IconHelp}" Size="15"/>
+        </Button>
+
+        <Slider Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Style="{StaticResource Slider.Tuning}"
+                Margin="0,2,0,0"
+                Value="{Binding Value, ElementName=Root, Mode=TwoWay}"
+                Minimum="{Binding Minimum, ElementName=Root}"
+                Maximum="{Binding Maximum, ElementName=Root}"
+                SmallChange="{Binding SmallChange, ElementName=Root}"
+                LargeChange="{Binding LargeChange, ElementName=Root}"
+                IsMoveToPointEnabled="True"/>
+    </Grid>
+</UserControl>

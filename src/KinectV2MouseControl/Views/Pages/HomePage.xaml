@@ -1,0 +1,302 @@
+<UserControl x:Class="KinectV2MouseControl.HomePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:KinectV2MouseControl">
+    <UserControl.Resources>
+        <Style x:Key="TileLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Eyebrow}">
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+        <Style x:Key="InputRow" TargetType="Grid">
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+        <Style x:Key="QuickButton" TargetType="Button" BasedOn="{StaticResource Button.Ghost}">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Padding" Value="12,9"/>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="28,16,28,28">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ============================ Hero ============================ -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="3*"/>
+                    <ColumnDefinition Width="2*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Style="{StaticResource CardStrong}" Padding="26,22" Margin="0,0,16,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Status orb -->
+                        <Grid Width="96" Height="96" Margin="0,0,26,0" VerticalAlignment="Center">
+                            <Ellipse Stroke="{StaticResource Brush.SurfaceBorderStrong}" StrokeThickness="1"/>
+                            <Ellipse Width="76" Height="76" Stroke="{Binding Status.ControlState, Converter={StaticResource StateBrush}}"
+                                     StrokeThickness="2" Opacity="0.55"/>
+                            <Ellipse Width="34" Height="34"
+                                     Fill="{Binding Status.ControlState, Converter={StaticResource StateBrush}}"
+                                     Effect="{Binding Status.ControlState, Converter={StaticResource StateGlow}}"/>
+                        </Grid>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Style="{StaticResource Text.Eyebrow}" Text="{Binding Status.ControlStateText, StringFormat=KINECT CONTROL · {0}}"/>
+                            <TextBlock Text="{Binding Status.Headline}" Style="{StaticResource Text.Display}" FontSize="28" Margin="0,4,0,2"/>
+                            <TextBlock Text="{Binding Status.ControlDetail}" Style="{StaticResource Text.BodyDim}"/>
+
+                            <WrapPanel Margin="0,16,0,0">
+                                <CheckBox Style="{StaticResource Toggle}" Content="Kinect control"
+                                          IsChecked="{Binding Engine.IsControlEnabled, Mode=TwoWay}"
+                                          IsEnabled="{Binding Status.IsEngineOn}" Margin="0,0,20,8"
+                                          ToolTip="Master switch. Off keeps tracking running so a double clap can bring control back."/>
+                                <Border Style="{StaticResource Pill}" Margin="0,0,8,8">
+                                    <TextBlock Style="{StaticResource Pill.Text}" Text="{Binding Status.ModeText, StringFormat=Mode · {0}}"/>
+                                </Border>
+                                <Border Style="{StaticResource Pill}" Margin="0,0,8,8">
+                                    <TextBlock Style="{StaticResource Pill.Text}" Text="{Binding Engine.ActiveProfileName, StringFormat=Profile · {0}}"/>
+                                </Border>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Right now -->
+                <Border Grid.Column="1" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="RIGHT NOW" Style="{StaticResource TileLabel}"/>
+                        <TextBlock Text="{Binding Status.LastAction}" Style="{StaticResource Text.Value}" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="Last action" Style="{StaticResource Text.Caption}" Margin="0,0,0,12"/>
+
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="30" Height="30" CornerRadius="9" Margin="0,0,10,0"
+                                    Background="{Binding Status.IsPointerActive, Converter={StaticResource OnSoftBrush}}">
+                                <local:IconView Icon="{StaticResource IconGestures}" Size="16"
+                                                Foreground="{Binding Status.IsPointerActive, Converter={StaticResource OnBrush}}"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Right hand · pointer" Style="{StaticResource Text.Body}"/>
+                                <TextBlock Text="{Binding Status.RightHandSummary}" Style="{StaticResource Text.Caption}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding Status.PointerStateText}" Style="{StaticResource Text.Mono}" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="30" Height="30" CornerRadius="9" Margin="0,0,10,0"
+                                    Background="{Binding Status.IsClutchArmed, Converter={StaticResource OnSoftBrush}}">
+                                <local:IconView Icon="{StaticResource IconHandLeft}" Size="16"
+                                                Foreground="{Binding Status.IsClutchArmed, Converter={StaticResource OnBrush}}"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Left hand · clutch" Style="{StaticResource Text.Body}"/>
+                                <TextBlock Text="{Binding Status.LeftHandSummary}" Style="{StaticResource Text.Caption}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding Status.SecondaryModeText}" Style="{StaticResource Text.Mono}" VerticalAlignment="Center"/>
+                        </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Width="30" Height="30" CornerRadius="9" Margin="0,0,10,0"
+                                    Background="{Binding Status.IsClapArmed, Converter={StaticResource OnSoftBrush}}">
+                                <local:IconView Icon="{StaticResource IconClap}" Size="16"
+                                                Foreground="{Binding Status.IsClapArmed, Converter={StaticResource OnBrush}}"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Double clap · toggle" Style="{StaticResource Text.Body}"/>
+                                <TextBlock Text="{Binding Status.GestureText, StringFormat=Gesture: {0}}" Style="{StaticResource Text.Caption}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding Status.ClapText}" Style="{StaticResource Text.Mono}" VerticalAlignment="Center"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- ============================ Tiles ============================ -->
+            <UniformGrid Grid.Row="1" Columns="4" Margin="-8,16,-8,0">
+                <Border Style="{StaticResource Tile}" Margin="8,0">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Text="SENSOR" Style="{StaticResource TileLabel}"/>
+                            <Ellipse Style="{StaticResource Dot}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,0,0"
+                                     Fill="{Binding Status.IsSensorConnected, Converter={StaticResource GoodBrush}}"
+                                     Effect="{Binding Status.IsSensorConnected, Converter={StaticResource GoodGlow}}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding Status.SensorText}" Style="{StaticResource Text.Value}"/>
+                        <TextBlock Text="{Binding Status.SensorDetail}" Style="{StaticResource Text.Caption}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Tile}" Margin="8,0">
+                    <StackPanel>
+                        <Grid>
+                            <TextBlock Text="TRACKING" Style="{StaticResource TileLabel}"/>
+                            <Ellipse Style="{StaticResource Dot}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,0,0"
+                                     Fill="{Binding Status.IsTracking, Converter={StaticResource GoodBrush}}"
+                                     Effect="{Binding Status.IsTracking, Converter={StaticResource GoodGlow}}"/>
+                        </Grid>
+                        <TextBlock Text="{Binding Status.TrackingShort}" Style="{StaticResource Text.Value}"/>
+                        <TextBlock Text="{Binding Status.TrackingDetail}" Style="{StaticResource Text.Caption}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Tile}" Margin="8,0">
+                    <StackPanel>
+                        <TextBlock Text="PROFILE" Style="{StaticResource TileLabel}"/>
+                        <TextBlock Text="{Binding Engine.ActiveProfileName}" Style="{StaticResource Text.Value}" FontSize="17" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Status.CalibrationText, StringFormat=Calibration: {0}}" Style="{StaticResource Text.Caption}" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Tile}" Margin="8,0">
+                    <StackPanel>
+                        <TextBlock Text="DISPLAYS" Style="{StaticResource TileLabel}"/>
+                        <TextBlock Text="{Binding Displays.DesktopShort}" Style="{StaticResource Text.Value}"/>
+                        <TextBlock Text="{Binding Displays.DesktopDetail}" Style="{StaticResource Text.Caption}"/>
+                    </StackPanel>
+                </Border>
+            </UniformGrid>
+
+            <!-- ============================ Lower row ============================ -->
+            <Grid Grid.Row="2" Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="4*"/>
+                    <ColumnDefinition Width="5*"/>
+                    <ColumnDefinition Width="3*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Inputs -->
+                <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,16,0">
+                    <StackPanel>
+                        <TextBlock Text="INPUTS" Style="{StaticResource TileLabel}" Margin="0,0,0,14"/>
+
+                        <Grid Style="{StaticResource InputRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <local:IconView Icon="{StaticResource IconGestures}" Size="18" Margin="0,0,12,0" Foreground="{StaticResource Brush.Accent}"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Gestures" Style="{StaticResource Text.Body}"/>
+                                <TextBlock Text="Right hand points and clicks, left fist scrolls and swipes" Style="{StaticResource Text.Caption}"/>
+                            </StackPanel>
+                            <Border Grid.Column="2" Style="{StaticResource Pill}"
+                                    Background="{Binding Status.IsGestureVocabularyOn, Converter={StaticResource GoodSoftBrush}}">
+                                <TextBlock Style="{StaticResource Pill.Text}" Text="{Binding Status.IsGestureVocabularyOn, Converter={StaticResource OnText}}"/>
+                            </Border>
+                        </Grid>
+
+                        <Grid Style="{StaticResource InputRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <local:IconView Icon="{StaticResource IconVoice}" Size="18" Margin="0,0,12,0" Foreground="{Binding Voice.IsListening, Converter={StaticResource OnBrush}}"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Voice" Style="{StaticResource Text.Body}"/>
+                                <TextBlock Text="{Binding Voice.StatusText, StringFormat=Local commands · {0}}" Style="{StaticResource Text.Caption}"/>
+                            </StackPanel>
+                            <Border Grid.Column="2" Style="{StaticResource Pill}"
+                                    Background="{Binding Voice.IsListening, Converter={StaticResource GoodSoftBrush}}">
+                                <TextBlock Style="{StaticResource Pill.Text}" Text="{Binding Voice.EnabledText}"/>
+                            </Border>
+                        </Grid>
+
+                        <Grid Style="{StaticResource InputRow}" Margin="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <local:IconView Icon="{StaticResource IconAi}" Size="18" Margin="0,0,12,0" Foreground="{StaticResource Brush.TextFaint}"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="AI assistant" Style="{StaticResource Text.Body}"/>
+                                <TextBlock Text="Reserved · will route intents through the same actions" Style="{StaticResource Text.Caption}"/>
+                            </StackPanel>
+                            <Border Grid.Column="2" Style="{StaticResource Pill}">
+                                <TextBlock Style="{StaticResource Pill.Text}" Text="Planned"/>
+                            </Border>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Recent activity -->
+                <Border Grid.Column="1" Style="{StaticResource Card}" Margin="0,0,16,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Grid Margin="0,0,0,12">
+                            <TextBlock Text="RECENT ACTIVITY" Style="{StaticResource TileLabel}" Margin="0"/>
+                            <TextBlock Text="Full log in Settings" Style="{StaticResource Text.Caption}" HorizontalAlignment="Right"/>
+                        </Grid>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="300">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding Activity}" ItemTemplate="{StaticResource ActivityItemTemplate}"/>
+                                <TextBlock Text="Nothing yet. Raise your right hand or clap twice, and events will appear here."
+                                           Style="{StaticResource Text.Caption}"
+                                           Visibility="{Binding Activity.Count, Converter={StaticResource Vis}, ConverterParameter=invert}"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+
+                <!-- Quick actions -->
+                <Border Grid.Column="2" Style="{StaticResource Card}">
+                    <StackPanel>
+                        <TextBlock Text="QUICK ACTIONS" Style="{StaticResource TileLabel}" Margin="0,0,0,14"/>
+                        <Button Style="{StaticResource QuickButton}" Command="{Binding CalibrateCommand}">
+                            <StackPanel Orientation="Horizontal">
+                                <local:IconView Icon="{StaticResource IconCrosshair}" Size="15" Margin="0,0,10,0" Foreground="{StaticResource Brush.Accent}"/>
+                                <TextBlock Text="{Binding Engine.CalibrateButtonText}"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource QuickButton}" Command="{Binding NavigateCommand}" CommandParameter="Gestures">
+                            <StackPanel Orientation="Horizontal">
+                                <local:IconView Icon="{StaticResource IconSettings}" Size="15" Margin="0,0,10,0" Foreground="{StaticResource Brush.Accent}"/>
+                                <TextBlock Text="Gesture tuning"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource QuickButton}" Command="{Binding NavigateCommand}" CommandParameter="Profiles">
+                            <StackPanel Orientation="Horizontal">
+                                <local:IconView Icon="{StaticResource IconProfiles}" Size="15" Margin="0,0,10,0" Foreground="{StaticResource Brush.Accent}"/>
+                                <TextBlock Text="Profiles"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource QuickButton}" Command="{Binding NavigateCommand}" CommandParameter="Displays">
+                            <StackPanel Orientation="Horizontal">
+                                <local:IconView Icon="{StaticResource IconDisplays}" Size="15" Margin="0,0,10,0" Foreground="{StaticResource Brush.Accent}"/>
+                                <TextBlock Text="Spatial setup"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource QuickButton}" Command="{Binding EnterCompactCommand}" Margin="0">
+                            <StackPanel Orientation="Horizontal">
+                                <local:IconView Icon="{StaticResource IconCompact}" Size="15" Margin="0,0,10,0" Foreground="{StaticResource Brush.Accent}"/>
+                                <TextBlock Text="Compact mode"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

@@ -10,7 +10,7 @@ namespace KinectV2MouseControl
         /// which hand is in control. Unlike the vertical offset this needs no tuning - it is
         /// set by shoulder width, not by posture.
         /// </summary>
-        const double GESTURE_X_OFFSET = 0.185f;
+        public const double GESTURE_X_OFFSET = 0.185f;
 
         /// <summary>
         /// Weight given to a sample whose hand or spine joint is Inferred rather than Tracked.
@@ -66,6 +66,15 @@ namespace KinectV2MouseControl
             }
 
             return 1;
+        }
+
+        /// <summary>
+        /// Raw Kinect TrackingState of the hand joint. Surfaced in diagnostics, and used by the
+        /// pointer stabilizer, which only starts a session from genuinely Tracked samples.
+        /// </summary>
+        public static TrackingState GetHandJointState(this Body body, bool isLeft)
+        {
+            return body.Joints[isLeft ? JointType.HandLeft : JointType.HandRight].TrackingState;
         }
 
         /// <summary>

@@ -1,13 +1,15 @@
 using System;
+using System.Diagnostics;
 
 namespace KinectV2MouseControl
 {
     /// <summary>
     /// The single place where a semantic intent becomes a Windows operation.
     ///
-    /// Everything upstream - gesture recognizers today, voice or scripted commands later -
-    /// speaks in ControlAction values and knows nothing about SendInput. Adding an action means
-    /// adding a case here; recognizers are untouched.
+    /// Everything upstream - gesture recognizers today, voice commands and the control center's
+    /// Actions page now, agent commands later - speaks in ControlAction values and knows
+    /// nothing about SendInput. Adding an action means adding a case here; recognizers are
+    /// untouched.
     ///
     /// Pointer movement is intentionally NOT routed through here. It is a continuous stream
     /// rather than a discrete intent: the filtered target is republished every sensor frame and
@@ -18,20 +20,33 @@ namespace KinectV2MouseControl
     /// built in stages 2-4, and remains single-writer.
     ///
     /// Wheel scrolling by contrast is discrete and low-rate, so it does belong here.
+    ///
+    /// Threading: Execute must be called on the UI thread. ToggleControl re-enters the engine,
+    /// and the engine's state is owned by that thread. Voice recognition arrives on a worker
+    /// thread and is marshalled by its view model before it gets here.
     /// </summary>
     public class ActionRouter : IActionSink
     {
+        public const string GestureSource = "gesture";
+
         /// <summary>
-        /// Raised after an action is carried out. Used for the diagnostics readout; also the
-        /// natural hook for logging or scripting later.
+        /// Raised after an action is carried out. Used for the diagnostics readout and the
+        /// activity feed; also the natural hook for logging or scripting later.
         /// </summary>
         public event EventHandler<ControlAction> ActionExecuted;
 
         /// <summary>
-        /// Target for ToggleControl. Set once at startup; left null the action is simply
-        /// ignored, which keeps the router usable without a host.
+        /// Target for the control actions. Set once at startup; left null those actions are
+        /// simply ignored, which keeps the router usable without a host.
         /// </summary>
         public IControlGate ControlGate { get; set; }
+
+        /// <summary>
+        /// Who asked for the action currently being executed (or the last one). Read by the
+        /// ActionExecuted handler so the activity feed can say "voice" or "gesture" without the
+        /// action struct having to carry it.
+        /// </summary>
+        public string LastSource { get; private set; }
 
         /// <summary>
         /// Accumulates fractional scroll so that sub-notch movement is not simply discarded.
@@ -40,8 +55,23 @@ namespace KinectV2MouseControl
         /// </summary>
         private double scrollRemainder;
 
+        public ActionRouter()
+        {
+            LastSource = GestureSource;
+        }
+
+        /// <summary>
+        /// IActionSink entry point used by the recognizers and the grip code.
+        /// </summary>
         public void Execute(ControlAction action)
         {
+            Execute(action, GestureSource);
+        }
+
+        public void Execute(ControlAction action, string source)
+        {
+            LastSource = source ?? GestureSource;
+
             switch (action.Type)
             {
                 case ControlActionType.LeftMouseDown:
@@ -85,7 +115,76 @@ namespace KinectV2MouseControl
                     // Note this re-enters the gesture layer: toggling resets every recognizer,
                     // including the one that just emitted this. Recognizers must therefore
                     // finish writing their state before emitting.
-                    ControlGate.ToggleControl();
+                    ControlGate.SetControlEnabled(!ControlGate.IsControlEnabled, LastSource);
+                    break;
+
+                case ControlActionType.EnableControl:
+                case ControlActionType.DisableControl:
+                    if (ControlGate == null)
+                    {
+                        return;
+                    }
+
+                    ControlGate.SetControlEnabled(action.Type == ControlActionType.EnableControl, LastSource);
+                    break;
+
+                case ControlActionType.MaximizeWindow:
+                    KeyboardControl.MaximizeWindow();
+                    break;
+
+                case ControlActionType.MinimizeWindow:
+                    KeyboardControl.MinimizeWindow();
+                    break;
+
+                case ControlActionType.SnapWindowLeft:
+                    KeyboardControl.SnapWindowLeft();
+                    break;
+
+                case ControlActionType.SnapWindowRight:
+                    KeyboardControl.SnapWindowRight();
+                    break;
+
+                case ControlActionType.ShowDesktop:
+                    KeyboardControl.ShowDesktop();
+                    break;
+
+                case ControlActionType.TaskView:
+                    KeyboardControl.TaskView();
+                    break;
+
+                case ControlActionType.CloseWindow:
+                    KeyboardControl.CloseWindow();
+                    break;
+
+                case ControlActionType.PlayPause:
+                    KeyboardControl.Tap(Win32Input.VK_MEDIA_PLAY_PAUSE);
+                    break;
+
+                case ControlActionType.NextTrack:
+                    KeyboardControl.Tap(Win32Input.VK_MEDIA_NEXT_TRACK);
+                    break;
+
+                case ControlActionType.PreviousTrack:
+                    KeyboardControl.Tap(Win32Input.VK_MEDIA_PREV_TRACK);
+                    break;
+
+                case ControlActionType.VolumeUp:
+                    KeyboardControl.Tap(Win32Input.VK_VOLUME_UP);
+                    break;
+
+                case ControlActionType.VolumeDown:
+                    KeyboardControl.Tap(Win32Input.VK_VOLUME_DOWN);
+                    break;
+
+                case ControlActionType.VolumeMute:
+                    KeyboardControl.Tap(Win32Input.VK_VOLUME_MUTE);
+                    break;
+
+                case ControlActionType.LaunchApp:
+                    if (!LaunchApp(action.Parameter))
+                    {
+                        return;
+                    }
                     break;
 
                 case ControlActionType.None:
@@ -115,6 +214,31 @@ namespace KinectV2MouseControl
             scrollRemainder -= wholeNotches;
             MouseControl.Scroll(wholeNotches);
             return true;
+        }
+
+        /// <summary>
+        /// Shell-launches a target (exe, document or URL). Failures are logged, never thrown,
+        /// so a bad command can't take the control engine down with it.
+        /// </summary>
+        private static bool LaunchApp(string target)
+        {
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                return false;
+            }
+
+            try
+            {
+                ProcessStartInfo info = new ProcessStartInfo(target);
+                info.UseShellExecute = true;
+                Process.Start(info);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Write("LaunchApp failed for '" + target + "': " + ex.Message);
+                return false;
+            }
         }
 
         /// <summary>

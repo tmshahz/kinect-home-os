@@ -1,11 +1,27 @@
-﻿using Microsoft.Kinect;
+using Microsoft.Kinect;
 using System;
-using System.Linq;
 
 namespace KinectV2MouseControl
 {
     /// <summary>
     /// Read Kinect sensor body data.
+    ///
+    /// Body selection: control locks onto one body and follows it until it is lost, so other
+    /// people walking past cannot steal the cursor. Which body gets locked matters. The sensor
+    /// occasionally reports a short-lived or partial "body" - a chair back, a second person
+    /// half in frame, the user's own silhouette while sitting down - and locking onto one of
+    /// those gives a skeleton whose hand joints jump around wildly, which from the chair looks
+    /// like the cursor jittering uncontrollably until the app is restarted. So:
+    ///
+    ///  - a body is only locked once enough of its core joints (head, spine, shoulders) are
+    ///    actually Tracked, preferring the best-tracked and then the nearest body;
+    ///  - if the locked body degrades to almost nothing while a well-tracked body is present,
+    ///    the lock is dropped (raising OnLostTracking, which runs the full release/reset path)
+    ///    and the good body is picked up on the next frame.
+    ///
+    /// Sensor availability: when the sensor disconnects (USB reset, power, the Windows audio
+    /// enhancement issue) frames just stop. That is reported immediately as lost tracking
+    /// rather than waiting for the stall watchdog.
     /// </summary>
     public class KinectReader
     {
@@ -14,6 +30,39 @@ namespace KinectV2MouseControl
 
         const int NO_LOST_FRAME_TRACK = -1;
         const int MAX_LOST_TRACKING_FRAME_ALLOWED = 5;
+
+        /// <summary>
+        /// Core joints Tracked (not Inferred) out of the six scored before a body may be locked.
+        /// </summary>
+        const int MIN_LOCK_SCORE = 3;
+
+        /// <summary>
+        /// Frames to wait for a body reaching MIN_LOCK_SCORE before settling for the best one
+        /// available, so an unusually occluded user is still picked up eventually.
+        /// </summary>
+        const int LOW_SCORE_LOCK_FRAMES = 30;
+
+        /// <summary>
+        /// A locked body at or below this score is considered degraded...
+        /// </summary>
+        const int DEGRADED_SCORE = 1;
+
+        /// <summary>
+        /// ...and is abandoned after this many consecutive degraded frames, if a body scoring at
+        /// least SWITCH_TARGET_SCORE is available instead.
+        /// </summary>
+        const int DEGRADED_SWITCH_FRAMES = 30;
+        const int SWITCH_TARGET_SCORE = 4;
+
+        private static readonly JointType[] CoreJoints = new JointType[]
+        {
+            JointType.Head,
+            JointType.SpineShoulder,
+            JointType.SpineMid,
+            JointType.SpineBase,
+            JointType.ShoulderLeft,
+            JointType.ShoulderRight
+        };
 
         /// <summary>
         /// Allowing some tracking lost frames before raising OnLostTracking events.
@@ -36,15 +85,63 @@ namespace KinectV2MouseControl
 
         ulong usedTrackingId = 0;
 
+        int lowScoreFrames;
+        int degradedFrames;
+
+        /// <summary>
+        /// Bodies the sensor is currently tracking, for diagnostics.
+        /// </summary>
+        public int TrackedBodyCount { get; private set; }
+
+        /// <summary>
+        /// Core-joint score of the locked body, 0-6, for diagnostics.
+        /// </summary>
+        public int LockedBodyScore { get; private set; }
+
+        public bool IsSensorAvailable
+        {
+            get
+            {
+                return sensor != null && sensor.IsAvailable;
+            }
+        }
+
+        /// <summary>
+        /// True between Open and Close. IsAvailable is only meaningful while open, so the UI
+        /// needs both to tell "sensor switched off" from "sensor not detected".
+        /// </summary>
+        public bool IsSensorOpen
+        {
+            get
+            {
+                return sensor != null && sensor.IsOpen;
+            }
+        }
+
         public KinectReader(bool openSensor = false)
         {
             sensor = KinectSensor.GetDefault();
+            sensor.IsAvailableChanged += Sensor_IsAvailableChanged;
             bodyFrameReader = sensor.BodyFrameSource.OpenReader();
             bodyFrameReader.FrameArrived += BodyFrameReader_FrameArrived;
 
             if (openSensor)
             {
                 Open();
+            }
+        }
+
+        private void Sensor_IsAvailableChanged(object sender, IsAvailableChangedEventArgs e)
+        {
+            RuntimeLog.Write("Sensor " + (e.IsAvailable ? "available" : "UNAVAILABLE"));
+            ActivityLog.Post(ActivityKind.Sensor,
+                e.IsAvailable ? "Kinect connected" : "Kinect unavailable",
+                e.IsAvailable ? "Sensor is streaming" : "Sensor stopped responding - check the USB / power connection",
+                "sensor");
+
+            if (!e.IsAvailable)
+            {
+                DropLock("sensor unavailable");
             }
         }
 
@@ -81,42 +178,129 @@ namespace KinectV2MouseControl
 
         private void HandleBodyData(TimeSpan relativeTime)
         {
-            /*
-             *  Use the first tracked body data for cursor controlling, until it loses tracking.
-             *  You can also make your own ways of selecting tracked person in this function.
-             */
+            Body lockedBody = null;
+            Body bestBody = null;
+            int bestScore = -1;
+            float bestDepth = float.MaxValue;
+            int trackedCount = 0;
 
-            bool hasTrackedBody = false;
-
-            if (usedTrackingId != 0)
+            for (int i = 0; i < bodies.Length; i++)
             {
-                Body trackedBody = bodies.FirstOrDefault<Body>(body => body.TrackingId == usedTrackingId);
-                if (trackedBody != null)
+                Body body = bodies[i];
+                if (body == null || !body.IsTracked)
                 {
-                    GetTrackedBody(trackedBody, relativeTime);
-                    hasTrackedBody = true;
+                    continue;
+                }
+
+                trackedCount++;
+
+                if (usedTrackingId != 0 && body.TrackingId == usedTrackingId)
+                {
+                    lockedBody = body;
+                    continue;
+                }
+
+                int score = ScoreBody(body);
+                float depth = body.Joints[JointType.SpineMid].Position.Z;
+                if (score > bestScore || (score == bestScore && depth < bestDepth))
+                {
+                    bestBody = body;
+                    bestScore = score;
+                    bestDepth = depth;
                 }
             }
-            else
+
+            TrackedBodyCount = trackedCount;
+
+            if (lockedBody != null)
             {
-                Body newBody = bodies.FirstOrDefault<Body>(body => body.IsTracked);
-                if (newBody != null)
+                LockedBodyScore = ScoreBody(lockedBody);
+
+                if (LockedBodyScore <= DEGRADED_SCORE && bestScore >= SWITCH_TARGET_SCORE)
                 {
-                    GetTrackedBody(newBody, relativeTime);
-                    usedTrackingId = newBody.TrackingId;
-                    hasTrackedBody = true;
+                    if (++degradedFrames > DEGRADED_SWITCH_FRAMES)
+                    {
+                        DropLock("locked body degraded (score " + LockedBodyScore
+                            + "), switching to body with score " + bestScore);
+                        return;
+                    }
+                }
+                else
+                {
+                    degradedFrames = 0;
+                }
+
+                GetTrackedBody(lockedBody, relativeTime);
+                return;
+            }
+
+            if (usedTrackingId == 0 && bestBody != null)
+            {
+                if (bestScore >= MIN_LOCK_SCORE || ++lowScoreFrames > LOW_SCORE_LOCK_FRAMES)
+                {
+                    usedTrackingId = bestBody.TrackingId;
+                    lowScoreFrames = 0;
+                    degradedFrames = 0;
+                    LockedBodyScore = bestScore;
+                    RuntimeLog.Write("Body locked (score " + bestScore + "/6, depth "
+                        + bestDepth.ToString("0.00") + " m, " + trackedCount + " tracked)");
+                    ActivityLog.Post(ActivityKind.Tracking, "Body locked",
+                        "Quality " + bestScore + "/6 at " + bestDepth.ToString("0.0") + " m", "sensor");
+                    GetTrackedBody(bestBody, relativeTime);
+                    return;
+                }
+            }
+            else if (bestBody == null)
+            {
+                lowScoreFrames = 0;
+            }
+
+            if (lostTrackingFrames != NO_LOST_FRAME_TRACK && ++lostTrackingFrames > MAX_LOST_TRACKING_FRAME_ALLOWED)
+            {
+                DropLock("body lost");
+            }
+        }
+
+        /// <summary>
+        /// Number of core joints the sensor is actually tracking, not inferring.
+        /// </summary>
+        private static int ScoreBody(Body body)
+        {
+            int score = 0;
+            for (int i = 0; i < CoreJoints.Length; i++)
+            {
+                if (body.Joints[CoreJoints[i]].TrackingState == TrackingState.Tracked)
+                {
+                    score++;
                 }
             }
 
+            return score;
+        }
 
-            if (!hasTrackedBody && lostTrackingFrames != NO_LOST_FRAME_TRACK && ++lostTrackingFrames > MAX_LOST_TRACKING_FRAME_ALLOWED)
+        /// <summary>
+        /// Forgets the locked body and reports lost tracking, which runs the full release and
+        /// reset path downstream.
+        /// </summary>
+        private void DropLock(string reason)
+        {
+            bool hadBody = usedTrackingId != 0 || lostTrackingFrames != NO_LOST_FRAME_TRACK;
+
+            lostTrackingFrames = NO_LOST_FRAME_TRACK;
+            usedTrackingId = 0;
+            lowScoreFrames = 0;
+            degradedFrames = 0;
+            LockedBodyScore = 0;
+
+            if (hadBody)
             {
-                lostTrackingFrames = NO_LOST_FRAME_TRACK;
-                usedTrackingId = 0;
-                if (OnLostTracking != null)
-                {
-                    OnLostTracking.Invoke(this, EventArgs.Empty);
-                }
+                RuntimeLog.Write("Tracking lost: " + reason);
+                ActivityLog.Post(ActivityKind.Tracking, "Tracking lost", reason, "sensor");
+            }
+
+            if (OnLostTracking != null)
+            {
+                OnLostTracking.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -137,6 +321,7 @@ namespace KinectV2MouseControl
             if (sensor != null && !sensor.IsOpen)
             {
                 sensor.Open();
+                RuntimeLog.Write("Sensor opened");
             }
         }
 
@@ -148,7 +333,16 @@ namespace KinectV2MouseControl
             if (sensor != null && sensor.IsOpen)
             {
                 sensor.Close();
+                RuntimeLog.Write("Sensor closed");
             }
+
+            // Closing ends the session outright, so a reopened sensor has to pick a body afresh.
+            usedTrackingId = 0;
+            lostTrackingFrames = NO_LOST_FRAME_TRACK;
+            lowScoreFrames = 0;
+            degradedFrames = 0;
+            TrackedBodyCount = 0;
+            LockedBodyScore = 0;
         }
     }
 

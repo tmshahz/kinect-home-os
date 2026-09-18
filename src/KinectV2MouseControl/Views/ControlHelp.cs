@@ -1,0 +1,293 @@
+using System.Collections.Generic;
+using System.Text;
+
+namespace KinectV2MouseControl
+{
+    /// <summary>
+    /// One explanation of one control.
+    /// </summary>
+    public class HelpEntry
+    {
+        /// <summary>
+        /// Must match the control's label exactly: that is how MainWindow attaches the tooltip.
+        /// </summary>
+        public string Title { get; private set; }
+        public string What { get; private set; }
+        public string Increase { get; private set; }
+        public string Decrease { get; private set; }
+        public string TooHigh { get; private set; }
+        public string TooLow { get; private set; }
+
+        public HelpEntry(string title, string what, string increase, string decrease, string tooHigh, string tooLow)
+        {
+            Title = title;
+            What = what;
+            Increase = increase;
+            Decrease = decrease;
+            TooHigh = tooHigh;
+            TooLow = tooLow;
+        }
+
+        /// <summary>
+        /// BuildText as a property, for data binding in the Settings guide.
+        /// </summary>
+        public string Summary
+        {
+            get
+            {
+                return BuildText();
+            }
+        }
+
+        public string BuildText()
+        {
+            StringBuilder text = new StringBuilder();
+            text.AppendLine(What);
+            if (Increase != null)
+            {
+                text.AppendLine("Higher: " + Increase);
+            }
+
+            if (Decrease != null)
+            {
+                text.AppendLine("Lower: " + Decrease);
+            }
+
+            if (TooHigh != null)
+            {
+                text.AppendLine("Too high: " + TooHigh);
+            }
+
+            if (TooLow != null)
+            {
+                text.Append("Too low: " + TooLow);
+            }
+
+            return text.ToString().TrimEnd();
+        }
+    }
+
+    /// <summary>
+    /// Single source for every control explanation. Used both for the tooltips on the controls
+    /// and for the Help window, so the two can never disagree.
+    /// </summary>
+    public static class ControlHelp
+    {
+        public const string Overview =
+            "RIGHT hand = pointer. Raise it forward into the control zone; after a short settle the cursor follows it. " +
+            "Close the right fist to press/drag, make a Lasso (two fingers) to right click.\n" +
+            "LEFT hand = secondary gestures only, and only while its fist is CLOSED (the clutch). " +
+            "Closed fist held still, then moved up/down = scroll. Closed fist swept quickly sideways = switch window. " +
+            "An open left hand does nothing.\n" +
+            "Double clap = turn Kinect control off / on (tracking keeps running while off).\n" +
+            "Lasso, scroll and swipe work in 'Grip to press' mode. Hover over any tuning control for its explanation, or click its ? to pin it in the help drawer.";
+
+        public static readonly List<HelpEntry> Entries = new List<HelpEntry>
+        {
+            new HelpEntry("Movement scale",
+                "How far the cursor moves per centimetre of hand movement, in the normal (uncalibrated) mapping. Ignored while Calibrated range is on.",
+                "less arm movement needed to cross the desktop, but aiming gets twitchier.",
+                "more precise, but you must reach further.",
+                "hand shimmer becomes visible cursor jitter; small targets are hard to hit.",
+                "the far edges of the desktop cannot be reached comfortably."),
+
+            new HelpEntry("Cursor smoothing",
+                "How strongly the adaptive filter calms the cursor while the hand is nearly still.",
+                "steadier at rest, with a little more lag when you start moving.",
+                "more immediate, but more shimmer.",
+                "cursor feels heavy and trails behind the hand.",
+                "cursor shakes while you try to hold still."),
+
+            new HelpEntry("Speed responsiveness",
+                "How much the filter opens up when the hand moves fast, so deliberate sweeps keep up.",
+                "fast movements follow more tightly.",
+                "the cursor stays smooth but lags on fast sweeps.",
+                "some jitter leaks through while moving.",
+                "quick sweeps feel rubbery and overshoot late."),
+
+            new HelpEntry("Jitter dead zone (px)",
+                "Tiny movements inside this radius are ignored. Beyond it the cursor trails smoothly (no jumps); the trailing shrinks as you move faster.",
+                "absorbs more tremor and sensor shimmer.",
+                "finer positioning is possible.",
+                "slow, careful moves feel slightly sticky/behind.",
+                "residual shimmer is visible when holding still."),
+
+            new HelpEntry("Click freeze (s)",
+                "How long the cursor stays pinned after a grip press is confirmed, before the hand can drag.",
+                "clicks land more reliably on small targets.",
+                "drags start sooner.",
+                "drags feel delayed; the first part of a drag is lost.",
+                "the cursor slips as the fist closes, clicking beside the target."),
+
+            new HelpEntry("Pointer settle (s)",
+                "When the right hand enters the zone (at startup and after any tracking loss), how long it must be tracked cleanly before it takes the cursor.",
+                "more reliable, cleaner starts; the cursor takes over a little later.",
+                "the cursor takes over sooner.",
+                "noticeable wait before the cursor responds after raising the hand.",
+                "startup/reacquisition can begin from a bad sample (jump or jitter burst)."),
+
+            new HelpEntry("Lock radius (px)",
+                "Stationary lock: the hand must stay within this radius, slowly, for the lock dwell time before the cursor is pinned.",
+                "the lock engages more easily.",
+                "the hand must be stiller to lock.",
+                "slow deliberate moves get locked (cursor stops when you meant to move).",
+                "the lock rarely engages, so resting shimmer shows."),
+
+            new HelpEntry("Lock dwell (s)",
+                "Stationary lock: how long the hand must be still before the cursor is pinned.",
+                "fewer accidental locks during slow moves.",
+                "the cursor pins sooner when you stop.",
+                "the cursor wanders briefly every time you stop.",
+                "brief pauses mid-movement lock the cursor."),
+
+            new HelpEntry("Breakout radius (px)",
+                "Stationary lock: how far the hand must move away from the locked point to unlock. Keep it above the lock radius.",
+                "a locked cursor is harder to disturb (good for clicking).",
+                "unlocking is quicker.",
+                "you must move noticeably before the cursor responds after a pause.",
+                "shimmer unlocks the cursor and it drifts again."),
+
+            new HelpEntry("Hand range X (m)",
+                "Calibrated range: width of the hand region that maps to the full desktop width. Set automatically by Calibrate.",
+                "more arm movement per desktop width, more precise.",
+                "less arm movement, more sensitive.",
+                "desktop edges need an uncomfortable stretch.",
+                "horizontal aiming is twitchy."),
+
+            new HelpEntry("Hand range Y (m)",
+                "Calibrated range: height of the hand region that maps to the full desktop height.",
+                "more arm movement top-to-bottom, more precise.",
+                "less arm movement, more sensitive.",
+                "top/bottom edges need an uncomfortable stretch.",
+                "vertical aiming is twitchy."),
+
+            new HelpEntry("Hand centre X (m)",
+                "Calibrated range: sideways position of the hand region. Positive moves it to your right.",
+                "the region shifts right (hand further right for the same cursor spot).",
+                "the region shifts left.",
+                "the left edge is easy but the right edge is out of reach.",
+                "the right edge is easy but the left edge is out of reach."),
+
+            new HelpEntry("Pointer height (m)",
+                "Hand height above your hips that maps to the vertical middle of the desktop. Calibrate adjusts it.",
+                "you hold your hand higher to point at the middle.",
+                "you point from a lower, more relaxed position.",
+                "tiring arm; the bottom of the screen is hard to reach.",
+                "the top of the screen needs an uncomfortable reach."),
+
+            new HelpEntry("Activation height (m)",
+                "Minimum hand height above your hips before a hand counts as 'in the zone' (pointer or clutch).",
+                "hands resting low never engage.",
+                "control engages from a lower, more relaxed hand.",
+                "you must hold your arm up to keep control.",
+                "a hand resting on your lap or armrest grabs the cursor."),
+
+            new HelpEntry("Forward activation (m)",
+                "How far in front of your hips a hand must be to count as 'in the zone'.",
+                "only a clearly extended hand engages.",
+                "control engages with the hand closer to the body.",
+                "you must stretch forward to keep control.",
+                "casual hand movement near the body engages control."),
+
+            new HelpEntry("Scroll speed",
+                "Scroll rate for the clutched left fist, at 10 cm past the dead zone (notches/s per metre).",
+                "faster scrolling for the same hand offset.",
+                "slower, more controllable scrolling.",
+                "pages fly past; hard to stop where you want.",
+                "long pages take too much time."),
+
+            new HelpEntry("Scroll curve",
+                "Shape of the scroll response. 1 = linear. Higher = gentler near neutral, faster further out.",
+                "finer control for small offsets, bigger boost for large ones.",
+                "more uniform response.",
+                "small offsets barely scroll; large ones jump to full speed.",
+                "(1.0 is the lowest useful value) small offsets scroll as fast as linear."),
+
+            new HelpEntry("Swipe distance (m)",
+                "How far the clutched left fist must sweep sideways (quickly) to switch window.",
+                "fewer accidental window switches.",
+                "switching needs a smaller sweep.",
+                "swipes are often not recognized.",
+                "normal repositioning with a closed left fist switches windows."),
+
+            new HelpEntry("Hover-to-click range",
+                "Hover to click mode only: how far (px) the cursor may move while the hover timer runs.",
+                "clicks happen despite a slightly wandering hand.",
+                "the hand must be stiller for a hover click.",
+                "unintended clicks while moving slowly.",
+                "hover clicks rarely complete."),
+
+            new HelpEntry("Hover-to-click duration",
+                "Hover to click mode only: seconds of hovering before a click.",
+                "fewer accidental clicks.",
+                "faster clicks.",
+                "clicking feels slow.",
+                "unintended clicks whenever you pause."),
+
+            new HelpEntry("Stationary lock",
+                "Pins the cursor completely once the hand is held still, so clicks land exactly. Released automatically while dragging.",
+                null, null, null, null),
+
+            new HelpEntry("Calibrated range",
+                "On: the hand region set by Calibrate (or the Hand range / centre sliders) maps onto the whole desktop, with separate horizontal and vertical scaling. Movement scale is ignored. Off: the original uniform mapping with Movement scale. Untick to revert instantly.",
+                null, null, null, null),
+
+            new HelpEntry("Invert scroll",
+                "Off: raising the clutched left fist scrolls up. On: raising it scrolls down.",
+                null, null, null, null),
+
+            new HelpEntry("Calibrate",
+                "Guided 5-point capture with the RIGHT hand: centre, left, right, top, bottom. Hold each point still until it is captured; the prompt shows progress. Kinect control is paused while capturing; the button cancels. A 5% edge assist is applied so edges are reached just before full stretch.",
+                null, null, null, null),
+
+            new HelpEntry("Profiles",
+                "Three slots for tuning experiments. Save stores every tuning and calibration value (not the control mode); Load applies them safely (buttons released, filters and sessions reset). Renaming a slot is saved immediately. Shared by Debug and Release builds.",
+                null, null, null, null),
+
+            // ---- Control center ----------------------------------------------------------------
+
+            new HelpEntry("Kinect control",
+                "The master switch. Off is standby: the sensor keeps tracking you but nothing moves or clicks, and a double clap (or this switch) brings control back. The Disabled control mode is different - it closes the sensor entirely.",
+                null, null, null, null),
+
+            new HelpEntry("Voice commands",
+                "Listens for the built-in phrases through the Windows speech recognizer, entirely on this PC, and runs them through the same action router as gestures. Off by default. If the Kinect starts reconnecting after enabling it, use a different default microphone.",
+                null, null, null, null),
+
+            new HelpEntry("Wake word",
+                "Said before every voice command, e.g. “Kinect, next window”. It is part of the recognition grammar, so ordinary conversation cannot trigger commands. Empty means bare commands are accepted, which is convenient but far more prone to false triggers.",
+                null, null, null, null),
+
+            new HelpEntry("Minimize to the floating widget",
+                "On: minimizing the control center hides it and shows the compact status widget instead of a taskbar button. Off: the window minimizes normally. The tray icon and the widget both bring the window back.",
+                null, null, null, null),
+
+            new HelpEntry("Start in compact mode",
+                "Launch straight into the floating widget, with the control center hidden until you open it from the widget or the tray icon.",
+                null, null, null, null),
+
+            new HelpEntry("Keep the widget above other windows",
+                "On: the compact widget floats over everything so the status is always visible. Off: it behaves like an ordinary window and can be covered.",
+                null, null, null, null)
+        };
+
+        public static HelpEntry Find(string title)
+        {
+            for (int i = 0; i < Entries.Count; i++)
+            {
+                if (Entries[i].Title == title)
+                {
+                    return Entries[i];
+                }
+            }
+
+            return null;
+        }
+
+        public static string BuildTooltip(string title)
+        {
+            HelpEntry entry = Find(title);
+            return entry == null ? null : entry.Title + "\n" + entry.BuildText();
+        }
+    }
+}

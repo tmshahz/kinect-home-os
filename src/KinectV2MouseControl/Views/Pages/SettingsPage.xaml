@@ -1,0 +1,209 @@
+<UserControl x:Class="KinectV2MouseControl.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:KinectV2MouseControl">
+    <UserControl.Resources>
+        <Style x:Key="HealthRow" TargetType="Grid">
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+        <Style x:Key="HealthLabel" TargetType="TextBlock" BasedOn="{StaticResource Text.Caption}">
+            <Setter Property="Width" Value="110"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="HealthValue" TargetType="TextBlock" BasedOn="{StaticResource Text.Body}">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SectionCard" TargetType="Border" BasedOn="{StaticResource Card}">
+            <Setter Property="Margin" Value="0,0,0,16"/>
+        </Style>
+
+        <DataTemplate x:Key="HelpEntryTemplate">
+            <Border BorderBrush="{StaticResource Brush.Divider}" BorderThickness="0,0,0,1" Padding="0,10">
+                <StackPanel>
+                    <TextBlock Text="{Binding Title}" Style="{StaticResource Text.Body}" FontWeight="SemiBold"/>
+                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Text.Caption}" Margin="0,3,0,0" LineHeight="17"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="28,16,28,28">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ============================ Left column ============================ -->
+            <StackPanel Grid.Column="0" Margin="0,0,16,0">
+
+                <Border Style="{StaticResource SectionCard}">
+                    <StackPanel>
+                        <TextBlock Text="CONTROL CENTER" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,12"/>
+                        <CheckBox x:Name="CompactOnMinimizeCheck" Style="{StaticResource Toggle}" Content="Minimize to the floating widget"
+                                  IsChecked="{Binding CompactOnMinimize, Mode=TwoWay}" Margin="0,0,0,10"/>
+                        <CheckBox x:Name="StartCompactCheck" Style="{StaticResource Toggle}" Content="Start in compact mode"
+                                  IsChecked="{Binding StartCompact, Mode=TwoWay}" Margin="0,0,0,10"/>
+                        <CheckBox x:Name="OverlayTopCheck" Style="{StaticResource Toggle}" Content="Keep the widget above other windows"
+                                  IsChecked="{Binding OverlayAlwaysOnTop, Mode=TwoWay}"/>
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,12,0,0"
+                                   Text="The tray icon is always available: double-click it to open the control center, or right-click for compact mode, the control switch and Quit."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SectionCard}">
+                    <StackPanel>
+                        <TextBlock Text="SYSTEM HEALTH" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,12"/>
+                        <Grid Style="{StaticResource HealthRow}">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Kinect" Style="{StaticResource HealthLabel}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Status.SensorDetail}" Style="{StaticResource HealthValue}"/>
+                            <Ellipse Grid.Column="2" Style="{StaticResource Dot}" Fill="{Binding Status.IsSensorConnected, Converter={StaticResource GoodBrush}}"/>
+                        </Grid>
+                        <Grid Style="{StaticResource HealthRow}">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Tracking" Style="{StaticResource HealthLabel}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Status.TrackingText}" Style="{StaticResource HealthValue}"/>
+                            <Ellipse Grid.Column="2" Style="{StaticResource Dot}" Fill="{Binding Status.IsTracking, Converter={StaticResource GoodBrush}}"/>
+                        </Grid>
+                        <Grid Style="{StaticResource HealthRow}">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Control" Style="{StaticResource HealthLabel}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Status.ControlDetail}" Style="{StaticResource HealthValue}"/>
+                            <Ellipse Grid.Column="2" Style="{StaticResource Dot}" Fill="{Binding Status.ControlState, Converter={StaticResource StateBrush}}"/>
+                        </Grid>
+                        <Grid Style="{StaticResource HealthRow}">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Voice" Style="{StaticResource HealthLabel}"/>
+                            <TextBlock Grid.Column="1" Style="{StaticResource HealthValue}">
+                                <Run Text="{Binding Voice.StatusText, Mode=OneWay}"/><Run Text=" &#183; "/><Run Text="{Binding Voice.MicrophoneSummary, Mode=OneWay}"/>
+                            </TextBlock>
+                            <Ellipse Grid.Column="2" Style="{StaticResource Dot}" Fill="{Binding Voice.IsListening, Converter={StaticResource GoodBrush}}"/>
+                        </Grid>
+                        <Grid Style="{StaticResource HealthRow}">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Frame timing" Style="{StaticResource HealthLabel}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Status.FrameText}" Style="{StaticResource HealthValue}"/>
+                        </Grid>
+                        <Grid Style="{StaticResource HealthRow}">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Signal" Style="{StaticResource HealthLabel}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Status.SignalText}" Style="{StaticResource HealthValue}"/>
+                        </Grid>
+                        <Grid Style="{StaticResource HealthRow}">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Desktop" Style="{StaticResource HealthLabel}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Status.DesktopText}" Style="{StaticResource HealthValue}"/>
+                        </Grid>
+                        <Grid Style="{StaticResource HealthRow}">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Calibration" Style="{StaticResource HealthLabel}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Status.CalibrationText}" Style="{StaticResource HealthValue}"/>
+                        </Grid>
+                        <Grid Style="{StaticResource HealthRow}" Margin="0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="Profile" Style="{StaticResource HealthLabel}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Engine.ActiveProfileName}" Style="{StaticResource HealthValue}"/>
+                        </Grid>
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,12,0,0"
+                                   Text="If the feed shows the Kinect dropping and reconnecting on Windows 11, disable the audio enhancements on the Kinect microphone in Sound settings - that has fixed it before."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SectionCard}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <TextBlock Text="ADVANCED DIAGNOSTICS" Style="{StaticResource Text.Eyebrow}"/>
+                            <TextBlock Text="live engine readout, 5 Hz" Style="{StaticResource Text.Caption}" HorizontalAlignment="Right"/>
+                        </Grid>
+                        <Border Style="{StaticResource CardInset}">
+                            <TextBlock Text="{Binding Engine.DiagnosticsText}" Style="{StaticResource Text.Mono}" FontSize="11.5" LineHeight="17"/>
+                        </Border>
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,10,0,0"
+                                   Text="Read these before touching filter tuning when something feels off: noise (px) while holding still is tracking noise, q is the body quality out of 6, glitches counts rejected samples, and dt is the sensor frame interval."/>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SectionCard}" Margin="0">
+                    <StackPanel>
+                        <TextBlock Text="ABOUT" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,10"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Grid Width="30" Height="30" Margin="0,0,12,0">
+                                <Ellipse Stroke="{StaticResource Brush.Accent}" StrokeThickness="2"/>
+                                <Ellipse Width="9" Height="9" Fill="{StaticResource Brush.Accent}"/>
+                            </Grid>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="KINECT-OS" FontSize="15" FontWeight="Bold"/>
+                                <TextBlock Style="{StaticResource Text.Caption}">
+                                    <Run Text="Version "/><Run Text="{Binding AppVersion, Mode=OneWay}"/><Run Text=" &#183; "/><Run Text="{Binding BuildConfiguration, Mode=OneWay}"/><Run Text=" build &#183; Kinect for Windows SDK 2.0 &#183; "/><Run Text="{Binding OsVersion, Mode=OneWay}"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Text.Caption}" Margin="0,0,0,10"
+                                   Text="Built on KinectV2MouseControl by Jingzhou Chen (http://TangoChen.com), MIT licence. The gesture engine, calibration and fail-safes are the Kinect Home OS control engine; this window is its control center."/>
+                        <TextBlock Text="{Binding ExecutablePath}" Style="{StaticResource Text.Mono}" FontSize="11" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- ============================ Right column ============================ -->
+            <StackPanel Grid.Column="1">
+                <Border Style="{StaticResource SectionCard}">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <TextBlock Text="ACTIVITY LOG" Style="{StaticResource Text.Eyebrow}"/>
+                            <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Right" Padding="8,2" Command="{Binding ClearActivityCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <local:IconView Icon="{StaticResource IconTrash}" Size="13" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Clear" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="380">
+                            <StackPanel>
+                                <ItemsControl ItemsSource="{Binding Activity}" ItemTemplate="{StaticResource ActivityItemTemplate}"/>
+                                <TextBlock Text="No events yet this session." Style="{StaticResource Text.Caption}"
+                                           Visibility="{Binding Activity.Count, Converter={StaticResource Vis}, ConverterParameter=invert}"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                        <Border Style="{StaticResource Divider}"/>
+                        <TextBlock Style="{StaticResource Text.Caption}" Text="The exhaustive engineering record for intermittent problems is the runtime log on disk:"/>
+                        <TextBlock Text="{Binding LogPath}" Style="{StaticResource Text.Mono}" FontSize="11" Margin="0,4,0,10" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource Button.Ghost}" Command="{Binding OpenLogCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <local:IconView Icon="{StaticResource IconFile}" Size="14" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Open runtime.log"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource Button.Ghost}" Command="{Binding OpenLogFolderCommand}" Margin="8,0,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <local:IconView Icon="{StaticResource IconFolder}" Size="14" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Open data folder"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Style="{StaticResource SectionCard}" Margin="0">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <TextBlock Text="HELP &amp; GUIDE" Style="{StaticResource Text.Eyebrow}"/>
+                            <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Right" Padding="8,2" Command="{Binding ToggleHelpCommand}">
+                                <StackPanel Orientation="Horizontal">
+                                    <local:IconView Icon="{StaticResource IconHelp}" Size="13" Margin="0,0,6,0"/>
+                                    <TextBlock Text="Help drawer" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="How to use" Style="{StaticResource Text.CardTitle}"/>
+                        <TextBlock Text="{Binding HelpOverview}" Style="{StaticResource Text.BodyDim}" Margin="0,6,0,12" LineHeight="19"/>
+                        <TextBlock Text="EVERY CONTROL" Style="{StaticResource Text.EyebrowAccent}" Margin="0,4,0,4"/>
+                        <ItemsControl ItemsSource="{Binding AllHelpEntries}" ItemTemplate="{StaticResource HelpEntryTemplate}"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

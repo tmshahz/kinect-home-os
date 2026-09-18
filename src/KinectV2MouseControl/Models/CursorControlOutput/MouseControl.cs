@@ -20,14 +20,40 @@ namespace KinectV2MouseControl
     /// </summary>
     public static class MouseControl
     {
+        /// <summary>
+        /// True between an injected left-button down and its up. Lets the process-level crash
+        /// and shutdown handlers release a button the normal teardown paths never got to.
+        /// </summary>
+        private static volatile bool isLeftDownInjected;
+
         public static void PressDown()
         {
+            isLeftDownInjected = true;
             Win32Input.Send(Win32Input.CreateMouseInput(Win32Input.MOUSEEVENTF_LEFTDOWN));
         }
 
         public static void PressUp()
         {
             Win32Input.Send(Win32Input.CreateMouseInput(Win32Input.MOUSEEVENTF_LEFTUP));
+            isLeftDownInjected = false;
+        }
+
+        /// <summary>
+        /// Last-resort fail-safe for unhandled exceptions, session end and process exit: if this
+        /// process pressed the left button and has not released it, release it now. The normal
+        /// release paths all go through ActionRouter; this bypasses it deliberately, because by
+        /// the time it runs the engine may be in no state to route anything.
+        /// </summary>
+        /// <returns>True when a release had to be sent.</returns>
+        public static bool ReleaseIfInjected()
+        {
+            if (!isLeftDownInjected)
+            {
+                return false;
+            }
+
+            PressUp();
+            return true;
         }
 
         public static void Click()

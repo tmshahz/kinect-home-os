@@ -55,19 +55,73 @@ namespace KinectV2MouseControl
         /// </summary>
         public double LassoCooldown { get; set; } = 0.60;
 
+        // ---- Secondary clutch (left fist) ---------------------------------------------------
+
+        /// <summary>
+        /// Seconds a confident Closed left hand must hold before the clutch engages. Short, so
+        /// the clutch feels immediate, but long enough to ignore a single stray Closed frame.
+        /// </summary>
+        public double ClutchEngageDuration { get; set; } = 0.10;
+
+        /// <summary>
+        /// Seconds an Open left hand must hold before the clutch releases. Slightly longer than
+        /// engaging, so a flicker while the fist moves does not drop a scroll mid-gesture.
+        /// </summary>
+        public double ClutchReleaseDuration { get; set; } = 0.15;
+
+        /// <summary>
+        /// Seconds without a single Closed observation after which an engaged clutch lets go,
+        /// even if the sensor never reports Open. Covers a hand that turns away or is occluded
+        /// and reports Unknown indefinitely.
+        /// </summary>
+        public double ClutchLossTimeout { get; set; } = 0.40;
+
         // ---- Scroll -----------------------------------------------------------------------
 
         /// <summary>
-        /// How long the second hand must sit inside the activation zone before scrolling arms.
-        /// Stops a hand passing through the zone from scrolling.
+        /// How long the clutched left hand must be held steady before scroll neutral is
+        /// captured. Stops a fist that closes mid-movement from capturing a neutral it has
+        /// already left behind.
         /// </summary>
-        public double ScrollEngageDwell { get; set; } = 0.15;
+        public double ScrollEngageDwell { get; set; } = 0.20;
 
         /// <summary>
         /// Metres the hand may wander during that dwell. Keeps neutral from being captured off
         /// a hand that is still moving, which would scroll hard the instant it armed.
         /// </summary>
-        public double ScrollEngageSteadyRadius { get; set; } = 0.05;
+        public double ScrollEngageSteadyRadius { get; set; } = 0.03;
+
+        /// <summary>
+        /// Shape of the rate curve. 1 is linear (the original behaviour); higher values give
+        /// finer control near neutral and more speed further out. The rate at
+        /// ScrollCurveReference past the dead zone is the same whatever the curve.
+        /// </summary>
+        public double ScrollCurve { get; set; } = 1.5;
+
+        /// <summary>
+        /// Offset past the dead zone, in metres, where the curve crosses the linear rate. Keeps
+        /// ScrollSpeed meaning roughly the same thing as the curve is changed.
+        /// </summary>
+        public double ScrollCurveReference { get; set; } = 0.10;
+
+        /// <summary>
+        /// False: raising the fist scrolls up (wheel away). True: raising it scrolls down.
+        /// </summary>
+        public bool InvertScroll { get; set; }
+
+        /// <summary>
+        /// Horizontal hand speed, metres per second, above which scrolling pauses. A swipe is a
+        /// fast horizontal movement and takes priority; this stops its vertical wobble from
+        /// scrolling the page while the swipe recognizer is still accumulating evidence.
+        /// </summary>
+        public double ScrollHorizontalHoldSpeed { get; set; } = 0.6;
+
+        /// <summary>
+        /// Time constant, seconds, of the light smoothing applied to the clutched hand's height
+        /// before it is compared with neutral. Kinect hand joints shimmer by about a centimetre,
+        /// which is the same size as the dead zone, so unsmoothed input chatters at its edge.
+        /// </summary>
+        public double ScrollHeightSmoothing { get; set; } = 0.06;
 
         /// <summary>
         /// Vertical dead zone around the position where scrolling armed.
@@ -75,9 +129,10 @@ namespace KinectV2MouseControl
         public double ScrollDeadzone { get; set; } = 0.03;
 
         /// <summary>
-        /// Wheel notches per second per metre of vertical offset past the dead zone. Scrolling
+        /// Wheel notches per second per metre of vertical offset past the dead zone, measured at
+        /// ScrollCurveReference (the curve bends the rate either side of that point). Scrolling
         /// is rate-controlled rather than displacement-mapped: holding the hand off-centre
-        /// scrolls continuously at a speed proportional to the offset, so you never run out of
+        /// scrolls continuously at a speed that grows with the offset, so you never run out of
         /// arm travel on a long page.
         /// </summary>
         public double ScrollSpeed { get; set; } = 60;
@@ -153,6 +208,33 @@ namespace KinectV2MouseControl
         /// being read as clapping.
         /// </summary>
         public double ClapMinHeight { get; set; } = 0.10;
+
+        // ---- Pointer session stabilization --------------------------------------------------
+
+        /// <summary>
+        /// Seconds of consistently good right-hand samples required before a pointer session
+        /// starts driving the cursor. Applies on startup and on every reacquisition.
+        /// </summary>
+        public double PointerSettleTime { get; set; } = 0.25;
+
+        /// <summary>
+        /// Minimum number of good frames inside that window, so a burst of delayed frames
+        /// cannot satisfy the settle time on its own.
+        /// </summary>
+        public int PointerSettleMinFrames { get; set; } = 5;
+
+        /// <summary>
+        /// Hand speed, metres per second, above which a sample is treated as a tracking glitch
+        /// rather than movement. A pointing hand does not approach this; a joint that snaps to
+        /// the wrong place for a frame exceeds it easily.
+        /// </summary>
+        public double PointerMaxHandSpeed { get; set; } = 6.0;
+
+        /// <summary>
+        /// Consecutive glitch samples tolerated during an active session before the session is
+        /// torn down and re-stabilized.
+        /// </summary>
+        public int PointerMaxGlitchFrames { get; set; } = 3;
 
         // ---- Stationary lock ---------------------------------------------------------------
 

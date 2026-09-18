@@ -1,0 +1,266 @@
+<UserControl x:Class="KinectV2MouseControl.DisplaysPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:KinectV2MouseControl">
+    <UserControl.Resources>
+        <!-- Calibration step pills light up as the capture advances. -->
+        <Style x:Key="StepPill" TargetType="Border" BasedOn="{StaticResource Pill}">
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="Padding" Value="9,3"/>
+            <Setter Property="Tag" Value="0"/>
+        </Style>
+        <Style x:Key="StepText" TargetType="TextBlock" BasedOn="{StaticResource Pill.Text}">
+            <Setter Property="FontSize" Value="10.5"/>
+        </Style>
+        <Style x:Key="MonitorBox" TargetType="ContentPresenter">
+            <Setter Property="Canvas.Left" Value="{Binding X}"/>
+            <Setter Property="Canvas.Top" Value="{Binding Y}"/>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="28,16,28,28">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- ============================ Desktop layout ============================ -->
+            <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource CardStrong}" Margin="0,0,16,16">
+                <StackPanel>
+                    <Grid Margin="0,0,0,12">
+                        <TextBlock Text="DESKTOP LAYOUT" Style="{StaticResource Text.Eyebrow}"/>
+                        <TextBlock Text="{Binding Displays.DesktopSummary}" Style="{StaticResource Text.Caption}" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Border Style="{StaticResource CardInset}" Padding="14" MinHeight="230">
+                        <Viewbox Stretch="Uniform" StretchDirection="Both">
+                            <Canvas Width="{Binding Displays.DesktopWidth}" Height="{Binding Displays.DesktopHeight}">
+                                <ItemsControl ItemsSource="{Binding Displays.Monitors}" ItemContainerStyle="{StaticResource MonitorBox}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <Canvas/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Width="{Binding Width}" Height="{Binding Height}"
+                                                    Background="{StaticResource Brush.Surface}"
+                                                    BorderBrush="{Binding IsPrimary, Converter={StaticResource OnBorderBrush}}"
+                                                    BorderThickness="{Binding Inset}" CornerRadius="{Binding Inset}">
+                                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Label}" FontSize="{Binding LabelSize}" FontWeight="SemiBold"
+                                                               Foreground="{StaticResource Brush.Text}" HorizontalAlignment="Center" Opacity="0.7"/>
+                                                    <TextBlock Text="{Binding ResolutionText}" FontSize="{Binding DetailSize}"
+                                                               Foreground="{StaticResource Brush.TextMuted}" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Ellipse Width="{Binding Displays.CursorSize}" Height="{Binding Displays.CursorSize}"
+                                         Canvas.Left="{Binding Displays.CursorLeft}" Canvas.Top="{Binding Displays.CursorTop}"
+                                         Fill="{StaticResource Brush.Accent}" Effect="{StaticResource Effect.AccentGlow}"
+                                         Visibility="{Binding Displays.HasCursor, Converter={StaticResource BoolToVis}}"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+                    <TextBlock Text="{Binding Displays.CursorText}" Style="{StaticResource Text.Caption}" Margin="0,10,0,0"/>
+                    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
+                               Text="Physical pixels, straight from Windows, including negative origins. The pointer is clamped to the nearest real monitor, so a hand aimed at a gap between mismatched screens never gets stuck there. The layout is re-read whenever monitors change."/>
+                </StackPanel>
+            </Border>
+
+            <!-- ============================ Hand space ============================ -->
+            <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource CardStrong}" Margin="0,0,0,16">
+                <StackPanel>
+                    <Grid Margin="0,0,0,12">
+                        <TextBlock Text="HAND SPACE" Style="{StaticResource Text.Eyebrow}"/>
+                        <TextBlock Text="{Binding Displays.MappingModeText}" Style="{StaticResource Text.Caption}" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Border Style="{StaticResource CardInset}" Padding="14" MinHeight="230">
+                        <Viewbox Stretch="Uniform">
+                            <Canvas Width="1500" Height="1300" ClipToBounds="True">
+                                <!-- A faint figure for orientation: head, shoulders, spine, hips. -->
+                                <Ellipse Canvas.Left="680" Canvas.Top="260" Width="140" Height="140"
+                                         Stroke="{StaticResource Brush.SurfaceBorderStrong}" StrokeThickness="4" Fill="{StaticResource Brush.Surface}"/>
+                                <Line X1="520" X2="980" Y1="550" Y2="550" Stroke="{StaticResource Brush.SurfaceBorderStrong}" StrokeThickness="4"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                <!-- Reference axes: spine (vertical) and hips (horizontal) -->
+                                <Line X1="{Binding Displays.SpineX}" X2="{Binding Displays.SpineX}" Y1="400" Y2="1300"
+                                      Stroke="{StaticResource Brush.Divider}" StrokeThickness="4" StrokeDashArray="6,6"/>
+                                <Line X1="0" X2="1500" Y1="{Binding Displays.HipLineY}" Y2="{Binding Displays.HipLineY}"
+                                      Stroke="{StaticResource Brush.SurfaceBorderStrong}" StrokeThickness="4"/>
+                                <TextBlock Canvas.Left="20" Canvas.Top="{Binding Displays.HipLineY}" Text="hips (SpineBase)" FontSize="38"
+                                           Foreground="{StaticResource Brush.TextFaint}" Margin="0,8,0,0"/>
+
+                                <!-- Activation height -->
+                                <Line X1="0" X2="1500" Y1="{Binding Displays.ActivationLineY}" Y2="{Binding Displays.ActivationLineY}"
+                                      Stroke="{StaticResource Brush.Warning}" StrokeThickness="4" StrokeDashArray="10,8" Opacity="0.8"/>
+                                <TextBlock Canvas.Left="20" Canvas.Top="{Binding Displays.ActivationLineY}" Text="activation height" FontSize="38"
+                                           Foreground="{StaticResource Brush.Warning}" Margin="0,-58,0,0"/>
+
+                                <!-- Reach rectangle for the right hand -->
+                                <Rectangle Canvas.Left="{Binding Displays.ReachX}" Canvas.Top="{Binding Displays.ReachY}"
+                                           Width="{Binding Displays.ReachWidth}" Height="{Binding Displays.ReachHeight}"
+                                           Fill="{StaticResource Brush.AccentFaint}" Stroke="{StaticResource Brush.Accent}" StrokeThickness="5"
+                                           RadiusX="24" RadiusY="24"/>
+                                <Line X1="0" X2="1500" Y1="{Binding Displays.PointerCentreY}" Y2="{Binding Displays.PointerCentreY}"
+                                      Stroke="{StaticResource Brush.Accent}" StrokeThickness="3" StrokeDashArray="4,8" Opacity="0.6"/>
+                                <TextBlock Canvas.Left="20" Canvas.Top="{Binding Displays.PointerCentreY}" Text="pointer height = screen centre" FontSize="38"
+                                           Foreground="{StaticResource Brush.Accent}" Margin="0,-58,0,0"/>
+
+                                <!-- Live hands -->
+                                <Ellipse Width="44" Height="44" Canvas.Left="{Binding Displays.LeftHandLeft}" Canvas.Top="{Binding Displays.LeftHandTop}"
+                                         Fill="{StaticResource Brush.TextMuted}" Opacity="0.85"
+                                         Visibility="{Binding Displays.ShowLeftHand, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock Canvas.Left="{Binding Displays.LeftHandLeft}" Canvas.Top="{Binding Displays.LeftHandTop}" Text="L" FontSize="34" FontWeight="Bold"
+                                           Foreground="{StaticResource Brush.Base}" Margin="11,0,0,0"
+                                           Visibility="{Binding Displays.ShowLeftHand, Converter={StaticResource BoolToVis}}"/>
+                                <Ellipse Width="44" Height="44" Canvas.Left="{Binding Displays.RightHandLeft}" Canvas.Top="{Binding Displays.RightHandTop}"
+                                         Fill="{StaticResource Brush.Accent}" Effect="{StaticResource Effect.AccentGlow}"
+                                         Visibility="{Binding Displays.ShowRightHand, Converter={StaticResource BoolToVis}}"/>
+                                <TextBlock Canvas.Left="{Binding Displays.RightHandLeft}" Canvas.Top="{Binding Displays.RightHandTop}" Text="R" FontSize="34" FontWeight="Bold"
+                                           Foreground="{StaticResource Brush.Base}" Margin="10,0,0,0"
+                                           Visibility="{Binding Displays.ShowRightHand, Converter={StaticResource BoolToVis}}"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Border>
+                    <TextBlock Text="{Binding Displays.ReachText, StringFormat=Reach: {0}}" Style="{StaticResource Text.Caption}" Margin="0,10,0,0"/>
+                    <TextBlock Text="{Binding Displays.MappingSummary}" Style="{StaticResource Text.Caption}" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ============================ Calibration ============================ -->
+            <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,16,0">
+                <StackPanel>
+                    <Grid>
+                        <TextBlock Text="GUIDED CALIBRATION" Style="{StaticResource Text.Eyebrow}"/>
+                        <Border Style="{StaticResource Pill}" HorizontalAlignment="Right" Padding="8,2"
+                                Background="{Binding Status.IsCalibrated, Converter={StaticResource GoodSoftBrush}}">
+                            <TextBlock Style="{StaticResource Pill.Text}" FontSize="10.5"
+                                       Text="{Binding Status.IsCalibrated, Converter={StaticResource OnText}}"/>
+                        </Border>
+                    </Grid>
+                    <TextBlock Style="{StaticResource Text.BodyDim}" Margin="0,10,0,0"
+                               Text="Five held points with the right hand - centre, left, right, top, bottom - each captured from a steady hold. The result maps your comfortable reach onto the whole desktop with independent horizontal and vertical scaling. Cursor control pauses while capturing; use the mouse to cancel."/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button x:Name="CalibrateButton" Style="{StaticResource Button.Primary}" Command="{Binding CalibrateCommand}" MinWidth="150">
+                            <StackPanel Orientation="Horizontal">
+                                <local:IconView Icon="{StaticResource IconCrosshair}" Size="15" Margin="0,0,8,0"/>
+                                <TextBlock Text="{Binding Engine.CalibrateButtonText}"/>
+                            </StackPanel>
+                        </Button>
+                        <CheckBox x:Name="CalibratedRangeCheck" Style="{StaticResource Toggle}" Content="Calibrated range" Margin="18,0,0,0"
+                                  IsChecked="{Binding Engine.UseCalibratedRange, Mode=TwoWay}"/>
+                    </StackPanel>
+
+                    <!-- Live capture progress -->
+                    <Border Style="{StaticResource CardInset}" Margin="0,16,0,0"
+                            Visibility="{Binding Status.IsCalibrating, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Border>
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource StepPill}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Status.CalibrationStep}" Value="1">
+                                                    <Setter Property="Background" Value="{StaticResource Brush.AccentSoft}"/>
+                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Style="{StaticResource StepText}" Text="1 Centre"/>
+                                </Border>
+                                <Border>
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource StepPill}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Status.CalibrationStep}" Value="2">
+                                                    <Setter Property="Background" Value="{StaticResource Brush.AccentSoft}"/>
+                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Style="{StaticResource StepText}" Text="2 Left"/>
+                                </Border>
+                                <Border>
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource StepPill}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Status.CalibrationStep}" Value="3">
+                                                    <Setter Property="Background" Value="{StaticResource Brush.AccentSoft}"/>
+                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Style="{StaticResource StepText}" Text="3 Right"/>
+                                </Border>
+                                <Border>
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource StepPill}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Status.CalibrationStep}" Value="4">
+                                                    <Setter Property="Background" Value="{StaticResource Brush.AccentSoft}"/>
+                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Style="{StaticResource StepText}" Text="4 Top"/>
+                                </Border>
+                                <Border>
+                                    <Border.Style>
+                                        <Style TargetType="Border" BasedOn="{StaticResource StepPill}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Status.CalibrationStep}" Value="5">
+                                                    <Setter Property="Background" Value="{StaticResource Brush.AccentSoft}"/>
+                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Style="{StaticResource StepText}" Text="5 Bottom"/>
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Status.CalibrationStepText}" Style="{StaticResource Text.CardTitle}"/>
+                            <Grid Margin="0,8,0,6" Height="6">
+                                <Border Background="{StaticResource Brush.SurfaceBorderStrong}" CornerRadius="3"/>
+                                <Border Background="{StaticResource Brush.AccentGradient}" CornerRadius="3" HorizontalAlignment="Left"
+                                        Width="{Binding Status.CalibrationProgress, Converter={StaticResource Scale}, ConverterParameter=320}"
+                                        Effect="{StaticResource Effect.AccentGlowSoft}"/>
+                            </Grid>
+                            <TextBlock Text="{Binding Status.CalibrationHint}" Style="{StaticResource Text.Caption}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="{Binding Engine.CalibrationPrompt}" Style="{StaticResource Text.Caption}" Margin="0,12,0,0"
+                               Visibility="{Binding Status.IsCalibrating, Converter={StaticResource Vis}, ConverterParameter=invert}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ============================ Range values ============================ -->
+            <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="RANGE &amp; MAPPING VALUES" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,6"/>
+                    <local:TuningSlider Label="Hand range X" Unit="m" HelpKey="Hand range X (m)" Minimum="0.15" Maximum="1.2" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.HandRangeX}"/>
+                    <local:TuningSlider Label="Hand range Y" Unit="m" HelpKey="Hand range Y (m)" Minimum="0.1" Maximum="0.9" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.HandRangeY}"/>
+                    <local:TuningSlider Label="Hand centre X" Unit="m" HelpKey="Hand centre X (m)" Minimum="-0.4" Maximum="0.4" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.HandCenterX}"/>
+                    <local:TuningSlider Label="Pointer height" Unit="m" HelpKey="Pointer height (m)" Minimum="0.2" Maximum="0.9" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.PointerCenterHeight}"/>
+                    <Border Style="{StaticResource Divider}"/>
+                    <local:TuningSlider Label="Movement scale" Unit="&#215;" Minimum="0.1" Maximum="6" SmallChange="0.05" LargeChange="0.5" Value="{Binding Engine.MoveScale}"
+                                        IsEnabled="{Binding Engine.UseCalibratedRange, Converter={StaticResource InvBool}}"/>
+                    <TextBlock Style="{StaticResource Text.Caption}"
+                               Text="Movement scale only applies to the uniform mapping; while Calibrated range is on, the rectangle alone defines reach and the slider is disabled here."/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

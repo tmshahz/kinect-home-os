@@ -32,6 +32,11 @@ namespace KinectV2MouseControl
         public double PositionWeight;
 
         /// <summary>
+        /// Raw TrackingState of the hand joint itself.
+        /// </summary>
+        public TrackingState JointState;
+
+        /// <summary>
         /// True when this hand is inside the activation zone, hysteresis included.
         /// </summary>
         public bool IsActivated;
@@ -59,6 +64,14 @@ namespace KinectV2MouseControl
         public const int RightHand = 1;
 
         /// <summary>
+        /// Hand roles are fixed. The right hand is the only hand that can point, click, drag or
+        /// right click; the left hand is the only hand that can scroll or swipe. Neither can
+        /// ever take the other's job, so there is no handoff between them.
+        /// </summary>
+        public const int PointerHand = RightHand;
+        public const int SecondaryHand = LeftHand;
+
+        /// <summary>
         /// Real elapsed seconds since the previous frame, from the sensor's own timestamps.
         /// </summary>
         public double DeltaTime;
@@ -72,15 +85,15 @@ namespace KinectV2MouseControl
         public bool IsControlEnabled = true;
 
         /// <summary>
-        /// Hand currently steering the pointer, or NoHand.
+        /// PointerHand while a pointer session is active (stabilized), otherwise NoHand.
         /// </summary>
         public int ControllingHandIndex = NoHand;
 
         /// <summary>
-        /// The other hand, when it is activated and therefore available as a modifier.
-        /// NoHand when it is down or untracked.
+        /// SecondaryGestureArmed: the left-fist clutch is engaged. Set by the engine before the
+        /// secondary recognizers run; scroll and swipe do nothing while it is false.
         /// </summary>
-        public int SecondHandIndex = NoHand;
+        public bool IsSecondaryGestureArmed;
 
         /// <summary>
         /// Indexed by LeftHand / RightHand.
@@ -125,7 +138,7 @@ namespace KinectV2MouseControl
             IsBodyTracked = false;
             // IsControlEnabled is owned by the host, not by the frame, so it is not cleared.
             ControllingHandIndex = NoHand;
-            SecondHandIndex = NoHand;
+            IsSecondaryGestureArmed = false;
             IsDragActive = false;
             IsGestureVocabularyEnabled = false;
             SuppressScroll = false;
