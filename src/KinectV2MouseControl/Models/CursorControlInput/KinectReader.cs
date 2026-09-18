@@ -51,6 +51,7 @@ namespace KinectV2MouseControl
         private void BodyFrameReader_FrameArrived(object sender, BodyFrameArrivedEventArgs e)
         {
             bool refreshedBodyData = false;
+            TimeSpan relativeTime = TimeSpan.Zero;
 
             using (BodyFrame bodyFrame = e.FrameReference.AcquireFrame())
             {
@@ -62,17 +63,23 @@ namespace KinectV2MouseControl
                     }
 
                     bodyFrame.GetAndRefreshBodyData(bodies);
+
+                    // The sensor's own timestamp for this frame. Used downstream to drive
+                    // time-aware filtering, which is more faithful than assuming 30Hz - frames
+                    // do get dropped under load, and assuming a fixed interval silently
+                    // changes how much smoothing is really applied when they are.
+                    relativeTime = bodyFrame.RelativeTime;
                     refreshedBodyData = true;
                 }
             }
 
             if (refreshedBodyData)
             {
-                HandleBodyData();
+                HandleBodyData(relativeTime);
             }
         }
 
-        private void HandleBodyData()
+        private void HandleBodyData(TimeSpan relativeTime)
         {
             /*
              *  Use the first tracked body data for cursor controlling, until it loses tracking.
@@ -86,7 +93,7 @@ namespace KinectV2MouseControl
                 Body trackedBody = bodies.FirstOrDefault<Body>(body => body.TrackingId == usedTrackingId);
                 if (trackedBody != null)
                 {
-                    GetTrackedBody(trackedBody);
+                    GetTrackedBody(trackedBody, relativeTime);
                     hasTrackedBody = true;
                 }
             }
@@ -95,7 +102,7 @@ namespace KinectV2MouseControl
                 Body newBody = bodies.FirstOrDefault<Body>(body => body.IsTracked);
                 if (newBody != null)
                 {
-                    GetTrackedBody(newBody);
+                    GetTrackedBody(newBody, relativeTime);
                     usedTrackingId = newBody.TrackingId;
                     hasTrackedBody = true;
                 }
@@ -113,12 +120,12 @@ namespace KinectV2MouseControl
             }
         }
 
-        private void GetTrackedBody(Body body)
+        private void GetTrackedBody(Body body, TimeSpan relativeTime)
         {
             lostTrackingFrames = 0;
             if (OnTrackedBody != null)
             {
-                OnTrackedBody.Invoke(this, new BodyEventArgs(body));
+                OnTrackedBody.Invoke(this, new BodyEventArgs(body, relativeTime));
             }
         }
 
@@ -149,9 +156,15 @@ namespace KinectV2MouseControl
     {
         public Body BodyData { get; private set; }
 
-        public BodyEventArgs(Body bodyData)
+        /// <summary>
+        /// Sensor timestamp of the frame this body data came from.
+        /// </summary>
+        public TimeSpan RelativeTime { get; private set; }
+
+        public BodyEventArgs(Body bodyData, TimeSpan relativeTime)
         {
             BodyData = bodyData;
+            RelativeTime = relativeTime;
         }
     }
 

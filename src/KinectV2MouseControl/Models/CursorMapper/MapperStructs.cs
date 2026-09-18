@@ -131,7 +131,7 @@ namespace KinectV2MouseControl
 
         public static MVector2 operator *(MVector2 value, double scaleFactor)
         {
-            value.Y *= scaleFactor;
+            value.X *= scaleFactor;
             value.Y *= scaleFactor;
             return value;
         }

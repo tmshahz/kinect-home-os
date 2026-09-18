@@ -19,6 +19,11 @@ namespace KinectV2MouseControl
             CursorViewModel.ResetToDefault();
         }
 
+        private void CalibrateButton_Click(object sender, RoutedEventArgs e)
+        {
+            CursorViewModel.ToggleCalibration();
+        }
+
         private void Window_Closed(object sender, System.EventArgs e)
         {
             CursorViewModel.Quit();

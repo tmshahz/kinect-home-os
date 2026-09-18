@@ -17,5 +17,53 @@
     <Setting Name="HoverDuration" Type="System.Double" Scope="User">
       <Value Profile="(Default)">2</Value>
     </Setting>
+    <Setting Name="SpeedResponsiveness" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">20</Value>
+    </Setting>
+    <Setting Name="JitterDeadzone" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">3</Value>
+    </Setting>
+    <Setting Name="ClickFreezeDuration" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.15</Value>
+    </Setting>
+    <Setting Name="PointerCenterHeight" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.5</Value>
+    </Setting>
+    <Setting Name="ForwardActivationDistance" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.15</Value>
+    </Setting>
+    <Setting Name="ActivationMinHeight" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.25</Value>
+    </Setting>
+    <Setting Name="ScrollSpeed" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">60</Value>
+    </Setting>
+    <Setting Name="SwipeMinDisplacement" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.25</Value>
+    </Setting>
+    <Setting Name="StationaryLockEnabled" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="StationaryLockRadius" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">15</Value>
+    </Setting>
+    <Setting Name="StationaryLockDwell" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.35</Value>
+    </Setting>
+    <Setting Name="StationaryBreakoutRadius" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">35</Value>
+    </Setting>
+    <Setting Name="UseCalibratedRange" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
+    <Setting Name="HandRangeX" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.5</Value>
+    </Setting>
+    <Setting Name="HandRangeY" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0.3</Value>
+    </Setting>
+    <Setting Name="HandCenterX" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

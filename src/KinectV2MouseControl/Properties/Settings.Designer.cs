@@ -82,5 +82,197 @@ namespace KinectV2MouseControl.Properties {
                 this["HoverDuration"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("20")]
+        public double SpeedResponsiveness {
+            get {
+                return ((double)(this["SpeedResponsiveness"]));
+            }
+            set {
+                this["SpeedResponsiveness"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("3")]
+        public double JitterDeadzone {
+            get {
+                return ((double)(this["JitterDeadzone"]));
+            }
+            set {
+                this["JitterDeadzone"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.15")]
+        public double ClickFreezeDuration {
+            get {
+                return ((double)(this["ClickFreezeDuration"]));
+            }
+            set {
+                this["ClickFreezeDuration"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.5")]
+        public double PointerCenterHeight {
+            get {
+                return ((double)(this["PointerCenterHeight"]));
+            }
+            set {
+                this["PointerCenterHeight"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.15")]
+        public double ForwardActivationDistance {
+            get {
+                return ((double)(this["ForwardActivationDistance"]));
+            }
+            set {
+                this["ForwardActivationDistance"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.25")]
+        public double ActivationMinHeight {
+            get {
+                return ((double)(this["ActivationMinHeight"]));
+            }
+            set {
+                this["ActivationMinHeight"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("60")]
+        public double ScrollSpeed {
+            get {
+                return ((double)(this["ScrollSpeed"]));
+            }
+            set {
+                this["ScrollSpeed"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.25")]
+        public double SwipeMinDisplacement {
+            get {
+                return ((double)(this["SwipeMinDisplacement"]));
+            }
+            set {
+                this["SwipeMinDisplacement"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool StationaryLockEnabled {
+            get {
+                return ((bool)(this["StationaryLockEnabled"]));
+            }
+            set {
+                this["StationaryLockEnabled"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("15")]
+        public double StationaryLockRadius {
+            get {
+                return ((double)(this["StationaryLockRadius"]));
+            }
+            set {
+                this["StationaryLockRadius"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.35")]
+        public double StationaryLockDwell {
+            get {
+                return ((double)(this["StationaryLockDwell"]));
+            }
+            set {
+                this["StationaryLockDwell"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("35")]
+        public double StationaryBreakoutRadius {
+            get {
+                return ((double)(this["StationaryBreakoutRadius"]));
+            }
+            set {
+                this["StationaryBreakoutRadius"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool UseCalibratedRange {
+            get {
+                return ((bool)(this["UseCalibratedRange"]));
+            }
+            set {
+                this["UseCalibratedRange"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.5")]
+        public double HandRangeX {
+            get {
+                return ((double)(this["HandRangeX"]));
+            }
+            set {
+                this["HandRangeX"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.3")]
+        public double HandRangeY {
+            get {
+                return ((double)(this["HandRangeY"]));
+            }
+            set {
+                this["HandRangeY"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public double HandCenterX {
+            get {
+                return ((double)(this["HandCenterX"]));
+            }
+            set {
+                this["HandCenterX"] = value;
+            }
+        }
     }
 }

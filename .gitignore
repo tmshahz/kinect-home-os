@@ -41,3 +41,19 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# =========================
+# Build Output
+# =========================
+
+bin/
+obj/
+
+# =========================
+# Visual Studio / local tooling
+# =========================
+
+.vs/
+*.suo
+*.user
+.claude/settings.local.json

@@ -1,89 +1,81 @@
 ﻿using System;
 using System.Runtime.InteropServices;
-//using System.Windows;
 
 namespace KinectV2MouseControl
 {
     /// <summary>
-    /// Mouse pressing down/up, clicking, and moving control.
-    /// 
-    /// Left down, left up, click with mouse_event function.
-    /// https://msdn.microsoft.com/en-us/library/windows/desktop/ms646260(v=vs.85).aspx
-    /// 
-    /// Moving with SetCursorPos function.
-    /// https://msdn.microsoft.com/en-us/library/windows/desktop/ms648394(v=vs.85).aspx
-    /// 
-    /// Get mouse position with GetCursorPos function.
-    /// https://msdn.microsoft.com/en-us/library/windows/desktop/ms648390(v=vs.85).aspx
+    /// Mouse pressing down/up, clicking, wheel and moving control.
+    ///
+    /// Buttons and wheel go through SendInput (see Win32Input), which supersedes the legacy
+    /// mouse_event entry point. Compound actions are submitted as a single batch so nothing
+    /// can be interleaved between the down and the up.
+    ///
+    /// Movement stays on SetCursorPos:
+    /// https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-setcursorpos
+    /// SendInput's absolute mode normalizes coordinates to a 0-65535 range over the virtual
+    /// desktop, which both quantizes the position and cannot express the negative coordinates
+    /// a monitor left of or above the primary one produces. SetCursorPos takes signed physical
+    /// pixels directly, so it is exact across the whole virtual desktop. It is also safe to
+    /// call from a background thread, which is what the cursor output loop does.
     /// </summary>
     public static class MouseControl
     {
         public static void PressDown()
         {
-            mouse_event(MouseEventFlag.LeftDown, 0, 0, 0, UIntPtr.Zero);
+            Win32Input.Send(Win32Input.CreateMouseInput(Win32Input.MOUSEEVENTF_LEFTDOWN));
         }
 
         public static void PressUp()
         {
-            mouse_event(MouseEventFlag.LeftUp, 0, 0, 0, UIntPtr.Zero);
+            Win32Input.Send(Win32Input.CreateMouseInput(Win32Input.MOUSEEVENTF_LEFTUP));
         }
 
         public static void Click()
         {
-            mouse_event(MouseEventFlag.LeftDown | MouseEventFlag.LeftUp, 0, 0, 0, UIntPtr.Zero);
+            Win32Input.Send(
+                Win32Input.CreateMouseInput(Win32Input.MOUSEEVENTF_LEFTDOWN),
+                Win32Input.CreateMouseInput(Win32Input.MOUSEEVENTF_LEFTUP));
         }
-        
+
+        public static void RightClick()
+        {
+            Win32Input.Send(
+                Win32Input.CreateMouseInput(Win32Input.MOUSEEVENTF_RIGHTDOWN),
+                Win32Input.CreateMouseInput(Win32Input.MOUSEEVENTF_RIGHTUP));
+        }
+
+        /// <summary>
+        /// Turns the wheel. Positive scrolls up/away from the user.
+        /// </summary>
+        /// <param name="notches">Wheel notches; fractional values are not submitted.</param>
+        public static void Scroll(int notches)
+        {
+            if (notches == 0)
+            {
+                return;
+            }
+
+            Win32Input.Send(Win32Input.CreateMouseInput(
+                Win32Input.MOUSEEVENTF_WHEEL,
+                notches * Win32Input.WHEEL_DELTA));
+        }
+
+        /// <summary>
+        /// Moves the cursor to an absolute physical-pixel position on the virtual desktop.
+        /// Coordinates are rounded rather than truncated, so a target of 100.6 lands on 101
+        /// instead of biasing every position toward the desktop origin.
+        /// </summary>
         public static bool MoveTo(double x, double y)
         {
-            return SetCursorPos((int)x, (int)y);
+            return MoveTo((int)Math.Round(x), (int)Math.Round(y));
+        }
+
+        public static bool MoveTo(int x, int y)
+        {
+            return SetCursorPos(x, y);
         }
 
         [DllImport("user32.dll")]
         private static extern bool SetCursorPos(int X, int Y);
-        [DllImport("user32.dll")]
-        private static extern void mouse_event(MouseEventFlag flags, int dx, int dy, uint data, UIntPtr extraInfo);
-        [Flags]
-        enum MouseEventFlag : uint
-        {
-            Move = 0x0001,
-            LeftDown = 0x0002,
-            LeftUp = 0x0004,
-            RightDown = 0x0008,
-            RightUp = 0x0010,
-            MiddleDown = 0x0020,
-            MiddleUp = 0x0040,
-            XDown = 0x0080,
-            XUp = 0x0100,
-            Wheel = 0x0800,
-            VirtualDesk = 0x4000,
-            Absolute = 0x8000
-        }
-
-
-        // GetCursorPos not used.
-
-        //[StructLayout(LayoutKind.Sequential)]
-        //private struct POINT
-        //{
-        //    public int X;
-        //    public int Y;
-
-        //    public static implicit operator Point(POINT point)
-        //    {
-        //        return new Point(point.X, point.Y);
-        //    }
-        //}
-
-        //[DllImport("user32.dll")]
-        //private static extern bool GetCursorPos(out POINT lpPoint);
-
-        //public static Point GetCursorPosition()
-        //{
-        //    POINT lpPoint;
-        //    GetCursorPos(out lpPoint);
-
-        //    return lpPoint;
-        //}
-
     }
 }

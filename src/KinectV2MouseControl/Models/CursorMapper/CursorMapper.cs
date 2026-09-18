@@ -56,9 +56,21 @@ namespace KinectV2MouseControl
         }
 
         private MVector2 totalScale;
-        private MVector2 moveOffset;
 
+        private readonly OneEuroVectorFilter positionFilter = new OneEuroVectorFilter();
+
+        /// <summary>
+        /// Last position actually handed out. Held still while the filtered position stays
+        /// inside the dead zone.
+        /// </summary>
         private MVector2 smoothedPosition;
+
+        /// <summary>
+        /// False until smoothedPosition holds a position from the current tracking session.
+        /// While false, the next smoothed position snaps straight to the target instead of
+        /// easing in from a stale (or initial zero) position.
+        /// </summary>
+        private bool hasSmoothedPosition = false;
 
         public enum ScaleAlignment
         {
@@ -87,17 +99,40 @@ namespace KinectV2MouseControl
         private const double SMOOTH_MAX = 1;
         private const double SMOOTH_MIN = 0;
 
+        /// <summary>
+        /// Cutoff frequency the filter settles at with Smoothing 0 - effectively unfiltered.
+        /// </summary>
+        private const double CUTOFF_AT_NO_SMOOTHING = 15.0;
+
+        /// <summary>
+        /// Cutoff frequency at Smoothing 1 - very calm, noticeably heavy.
+        /// </summary>
+        private const double CUTOFF_AT_FULL_SMOOTHING = 0.4;
+
+        /// <summary>
+        /// Scale from the 0-100 SpeedResponsiveness dial to the filter's beta coefficient.
+        /// </summary>
+        private const double BETA_PER_RESPONSIVENESS_UNIT = 0.0001;
+
+        private double _smoothing;
+
         /*
-         * Smoothing here is done by not moving cursor to exact target position but somewhere in between.
-         * NewCursorPos = CurrentPos + (TargetPos - CurrentPos) * moveAmount;
-         * moveAmount represents how much of the movement will be applied. e.g. 0.5 meaning the half way from current position to destination.
+         * Smoothing no longer applies a fixed fraction of each movement. It now picks the
+         * resting cutoff frequency of an adaptive One Euro filter, mapped geometrically so the
+         * slider stays useful across its whole travel:
+         *
+         *     0.00 -> 15.0 Hz   (near raw)
+         *     0.50 ->  2.4 Hz
+         *     0.75 ->  1.0 Hz
+         *     1.00 ->  0.4 Hz   (very heavy)
+         *
+         * Higher still means smoother, so an existing saved value keeps its meaning.
          */
-        double moveAmount = 1;
         public double Smoothing
         {
             get
             {
-                return 1 - moveAmount;
+                return _smoothing;
             }
             set
             {
@@ -111,34 +146,101 @@ namespace KinectV2MouseControl
                     value = SMOOTH_MIN;
                 }
 
-                moveAmount = 1 - value;
+                _smoothing = value;
+                positionFilter.MinCutoff = CUTOFF_AT_NO_SMOOTHING
+                    * Math.Pow(CUTOFF_AT_FULL_SMOOTHING / CUTOFF_AT_NO_SMOOTHING, value);
             }
         }
+
+        private double _speedResponsiveness;
+
+        /// <summary>
+        /// 0-100 dial for how much the filter opens up during fast movement. 0 makes the
+        /// filter a plain fixed-cutoff low pass; higher values trade a little jitter during
+        /// motion for a cursor that keeps up with a deliberate sweep.
+        /// </summary>
+        public double SpeedResponsiveness
+        {
+            get
+            {
+                return _speedResponsiveness;
+            }
+            set
+            {
+                if (value < 0)
+                {
+                    value = 0;
+                }
+
+                _speedResponsiveness = value;
+                positionFilter.Beta = value * BETA_PER_RESPONSIVENESS_UNIT;
+            }
+        }
+
+        /// <summary>
+        /// Radius in output pixels that the filtered position must leave before the cursor is
+        /// allowed to move again. Absorbs the last of the sensor shimmer and any physical hand
+        /// tremor while aiming. Once exceeded the cursor goes to the full filtered position, so
+        /// this costs nothing during real movement.
+        /// </summary>
+        public double JitterDeadzone { get; set; } = 3.0;
 
         public CursorMapper(MRect inputRect, MRect outputRect, ScaleAlignment scaleAlign = ScaleAlignment.None)
         {
             ScaleAlign = scaleAlign;
             SetRects(inputRect, outputRect);
+
+            // Push the dials through their setters so the backing fields and the filter's own
+            // defaults agree before any settings are loaded.
+            Smoothing = 0.7;
+            SpeedResponsiveness = 20;
         }
 
         public MVector2 GetOutputPosition(MVector2 inputPosition)
         {
-            return _outputRect.Center + (inputPosition - _inputRect.Center) * totalScale + moveOffset;
+            return _outputRect.Center + (inputPosition - _inputRect.Center) * totalScale;
         }
 
         /// <summary>
-        /// Get smoothed position.
+        /// Maps an input position to the output rect, runs it through the adaptive filter and
+        /// applies the jitter dead zone.
         /// </summary>
         /// <param name="inputPosition">Position from input.</param>
-        /// <param name="extraScale">
-        /// Used as an extra control on how much the position is moving other than the moveAmount for smoothing.
-        /// e.g. You can insert past time duration so the smoothing can be time-depended. And you may need to adjust Smoothing due to a big result change influenced by this value.
+        /// <param name="deltaTime">
+        /// Real elapsed seconds since the previous sample. The filter is time-aware, so a
+        /// dropped sensor frame no longer silently changes how much smoothing is applied.
         /// </param>
-        /// <returns></returns>
-        public MVector2 GetSmoothedOutputPosition(MVector2 inputPosition, double extraScale = 1)
+        /// <param name="positionWeight">
+        /// 0-1 confidence in this sample, from the joint's Kinect TrackingState. Below 1 the
+        /// filter leans further on its own history, so an Inferred joint contributes less.
+        /// </param>
+        public MVector2 GetSmoothedOutputPosition(MVector2 inputPosition, double deltaTime, double positionWeight = 1)
         {
-            smoothedPosition += (GetOutputPosition(inputPosition) - smoothedPosition) * moveAmount * extraScale;
+            MVector2 filteredPosition = positionFilter.Filter(GetOutputPosition(inputPosition), deltaTime, positionWeight);
+
+            if (!hasSmoothedPosition)
+            {
+                smoothedPosition = filteredPosition;
+                hasSmoothedPosition = true;
+            }
+            else if ((filteredPosition - smoothedPosition).Length() > JitterDeadzone)
+            {
+                smoothedPosition = filteredPosition;
+            }
+
             return smoothedPosition;
+        }
+
+        /// <summary>
+        /// Drops the smoothing state, so the next smoothed position starts from the hand's
+        /// actual mapped position. Call this whenever tracking is lost or a new hand takes
+        /// over control, otherwise the cursor eases in from wherever it was left behind.
+        /// </summary>
+        public void ResetSmoothing()
+        {
+            hasSmoothedPosition = false;
+            smoothedPosition = MVector2.Zero;
+            positionFilter.Reset();
         }
 
         public void SetRects(MRect inputRect, MRect outputRect)
@@ -185,9 +287,10 @@ namespace KinectV2MouseControl
                     break;
             }
 
-            moveOffset.X = _outputRect.Left;
-            moveOffset.Y = _outputRect.Top;
-
+            // No separate origin offset: OutputRect.Center already carries the rect's origin,
+            // so adding Left/Top again only happened to be harmless while the output rect
+            // started at (0,0). A virtual desktop whose origin is negative - a monitor placed
+            // left of or above the primary one - would otherwise be shifted by that origin.
             totalScale = _moveScale * _alignScale;
         }
 

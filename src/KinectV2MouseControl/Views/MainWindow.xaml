@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:KinectV2MouseControl" x:Name="window"
-        Title="Kinect v2 Mouse Control" Height="480.785" Width="404.476" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen"
+        Title="Kinect v2 Mouse Control" Height="740" Width="404.476" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen"
         Loaded="Window_Loaded" Closed="Window_Closed">
     <Window.DataContext>
         <local:KinectCursorViewModel x:Name="CursorViewModel" />
@@ -12,12 +12,30 @@
     </Window.Resources>
     <Grid>
         <StackPanel Orientation="Vertical" Margin="2,0">
-            <StackPanel VerticalAlignment="Top" Height="280" Grid.RowSpan="2" ScrollViewer.VerticalScrollBarVisibility="Disabled" Margin="0">
-                <local:ParameterControl Description="Movement scale" Minimum="0.1" Maximum="6" Height="70" Value="{Binding MoveScale, Mode=TwoWay}" SmallChange="0.1"/>
-                <local:ParameterControl Description="Cursor smoothing" Minimum="0" Maximum="0.95" Height="70" Value="{Binding Smoothing, Mode=TwoWay}" SmallChange="0.1"/>
-                <local:ParameterControl Description="Hover-to-click range" Minimum="5" Maximum="150" Height="70" Value="{Binding HoverRange, Mode=TwoWay}" SmallChange="0.1"/>
-                <local:ParameterControl Description="Hover-to-click duration" Minimum="0.3" Maximum="5" Height="70" Value="{Binding HoverDuration, Mode=TwoWay}" SmallChange="0.1"/>
-            </StackPanel>
+            <!-- Scrolls because there are now more parameters than fit a window of a sensible
+                 height. Keeps the existing controls and layout as they were. -->
+            <ScrollViewer VerticalAlignment="Top" Height="310" VerticalScrollBarVisibility="Auto" Margin="0">
+                <StackPanel Margin="0">
+                    <local:ParameterControl Description="Movement scale" Minimum="0.1" Maximum="6" Height="70" Value="{Binding MoveScale, Mode=TwoWay}" SmallChange="0.1"/>
+                    <local:ParameterControl Description="Cursor smoothing" Minimum="0" Maximum="0.95" Height="70" Value="{Binding Smoothing, Mode=TwoWay}" SmallChange="0.1"/>
+                    <local:ParameterControl Description="Speed responsiveness" Minimum="0" Maximum="100" Height="70" Value="{Binding SpeedResponsiveness, Mode=TwoWay}" SmallChange="1"/>
+                    <local:ParameterControl Description="Jitter dead zone (px)" Minimum="0" Maximum="20" Height="70" Value="{Binding JitterDeadzone, Mode=TwoWay}" SmallChange="0.5"/>
+                    <local:ParameterControl Description="Click freeze (s)" Minimum="0" Maximum="0.5" Height="70" Value="{Binding ClickFreezeDuration, Mode=TwoWay}" SmallChange="0.01"/>
+                    <local:ParameterControl Description="Lock radius (px)" Minimum="2" Maximum="60" Height="70" Value="{Binding StationaryLockRadius, Mode=TwoWay}" SmallChange="1"/>
+                    <local:ParameterControl Description="Lock dwell (s)" Minimum="0.05" Maximum="1.5" Height="70" Value="{Binding StationaryLockDwell, Mode=TwoWay}" SmallChange="0.05"/>
+                    <local:ParameterControl Description="Breakout radius (px)" Minimum="5" Maximum="150" Height="70" Value="{Binding StationaryBreakoutRadius, Mode=TwoWay}" SmallChange="1"/>
+                    <local:ParameterControl Description="Hand range X (m)" Minimum="0.15" Maximum="1.2" Height="70" Value="{Binding HandRangeX, Mode=TwoWay}" SmallChange="0.01"/>
+                    <local:ParameterControl Description="Hand range Y (m)" Minimum="0.1" Maximum="0.9" Height="70" Value="{Binding HandRangeY, Mode=TwoWay}" SmallChange="0.01"/>
+                    <local:ParameterControl Description="Hand centre X (m)" Minimum="-0.4" Maximum="0.4" Height="70" Value="{Binding HandCenterX, Mode=TwoWay}" SmallChange="0.01"/>
+                    <local:ParameterControl Description="Pointer height (m)" Minimum="0.2" Maximum="0.9" Height="70" Value="{Binding PointerCenterHeight, Mode=TwoWay}" SmallChange="0.01"/>
+                    <local:ParameterControl Description="Activation height (m)" Minimum="0" Maximum="0.7" Height="70" Value="{Binding ActivationMinHeight, Mode=TwoWay}" SmallChange="0.01"/>
+                    <local:ParameterControl Description="Forward activation (m)" Minimum="0.02" Maximum="0.4" Height="70" Value="{Binding ForwardActivationDistance, Mode=TwoWay}" SmallChange="0.01"/>
+                    <local:ParameterControl Description="Scroll speed" Minimum="10" Maximum="200" Height="70" Value="{Binding ScrollSpeed, Mode=TwoWay}" SmallChange="5"/>
+                    <local:ParameterControl Description="Swipe distance (m)" Minimum="0.1" Maximum="0.6" Height="70" Value="{Binding SwipeMinDisplacement, Mode=TwoWay}" SmallChange="0.01"/>
+                    <local:ParameterControl Description="Hover-to-click range" Minimum="5" Maximum="150" Height="70" Value="{Binding HoverRange, Mode=TwoWay}" SmallChange="0.1"/>
+                    <local:ParameterControl Description="Hover-to-click duration" Minimum="0.3" Maximum="5" Height="70" Value="{Binding HoverDuration, Mode=TwoWay}" SmallChange="0.1"/>
+                </StackPanel>
+            </ScrollViewer>
             <Label Content="Control mode" VerticalAlignment="Top" Grid.RowSpan="2" Margin="10,6,10,2"/>
             <Grid ScrollViewer.VerticalScrollBarVisibility="Disabled" VerticalAlignment="Top" Height="80" Margin="0,2">
                 <Grid.RowDefinitions>
@@ -36,6 +54,21 @@
                 <RadioButton Content="Move + grip pressing"  GroupName="ControlMode" Width="145" IsChecked="{Binding ControlModeIndex, Mode=TwoWay, Converter={StaticResource RadioCheckConverter}, ConverterParameter=4}" Grid.Column="0" Height="20" Grid.Row="2" VerticalAlignment="Center" VerticalContentAlignment="Center" />
                 <RadioButton Content="Move + lift clicking"  GroupName="ControlMode" Width="145" IsChecked="{Binding ControlModeIndex, Mode=TwoWay, Converter={StaticResource RadioCheckConverter}, ConverterParameter=5}" Grid.Column="1" Height="20" Grid.Row="2" VerticalAlignment="Center" VerticalContentAlignment="Center" />
             </Grid>
+            <Grid Height="26" Margin="10,4,10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <CheckBox Content="Stationary lock" Grid.Column="0" VerticalAlignment="Center" IsChecked="{Binding StationaryLockEnabled, Mode=TwoWay}"/>
+                <CheckBox Content="Calibrated range" Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding UseCalibratedRange, Mode=TwoWay}"/>
+                <Button Content="{Binding CalibrateButtonText}" Grid.Column="2" Width="74" Height="22" Background="WhiteSmoke" Click="CalibrateButton_Click"/>
+            </Grid>
+
+            <!-- Live gesture state, for tuning the thresholds against real hardware. -->
+            <Border BorderBrush="LightGray" BorderThickness="1" Margin="10,6,10,0" Padding="6,4" Background="#FFFAFAFA">
+                <TextBlock Text="{Binding DiagnosticsText}" FontFamily="Consolas" FontSize="11" Height="150" TextWrapping="NoWrap"/>
+            </Border>
             <Grid Height="35" Margin="0,4,0,0">
                 <Button Content="Default" HorizontalAlignment="Right" Width="74" Height="24" Background="WhiteSmoke" Grid.RowSpan="2" Margin="0,0,11.5,0" HorizontalContentAlignment="Center" Click="DefaultButton_Click"/>
                 <Label Content="by Jingzhou Chen (http://TangoChen.com)" HorizontalAlignment="Left" Width="284" FontSize="10.5" Foreground="Gray" Grid.RowSpan="2" Margin="10,0,0,0" VerticalContentAlignment="Center"/>
