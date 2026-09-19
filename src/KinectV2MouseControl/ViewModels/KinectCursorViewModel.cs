@@ -80,10 +80,20 @@ namespace KinectV2MouseControl
         /// that derive geometry from it (the Displays page).
         /// </summary>
         public event EventHandler StatusRefreshed;
+        public event EventHandler GestureControlToggled;
+        public Func<string, bool> ControlCenterHandler { set { kinectCursor.Actions.ControlCenterHandler = value; } }
 
         public KinectCursorViewModel()
         {
             kinectCursor = new KinectCursor();
+            kinectCursor.Actions.ActionExecuted += (sender, action) =>
+            {
+                if (action.Type == ControlActionType.ToggleControl && kinectCursor.Actions.LastSource == ActionRouter.GestureSource)
+                {
+                    EventHandler handler = GestureControlToggled;
+                    if (handler != null) { handler(this, EventArgs.Empty); }
+                }
+            };
             kinectCursor.ControlEnabledChanged += KinectCursor_ControlEnabledChanged;
             kinectCursor.DesktopChanged += KinectCursor_DesktopChanged;
             Status = new LiveStatus();

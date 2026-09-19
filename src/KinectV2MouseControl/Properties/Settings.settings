@@ -116,5 +116,11 @@
     <Setting Name="VoiceListeningClick" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
     </Setting>
+    <Setting Name="AssistantModel" Type="System.String" Scope="User">
+      <Value Profile="(Default)">deepseek-flash</Value>
+    </Setting>
+    <Setting Name="SendOtherRequestsToAI" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

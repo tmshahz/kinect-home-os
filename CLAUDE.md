@@ -37,14 +37,14 @@ Windows control              MouseControl / KeyboardControl (SendInput), CursorO
 Inputs other than gestures plug in at the `ActionRouter`/`ControlAction` boundary: the
 wake-gated voice engine already does (`WakeGatedVoiceEngine` authorizes one command per wake
 → `VoiceViewModel` → `ActionRouter.Execute(action, "voice")`), the Actions page does
-("control center"), and the AI section is a placeholder for the same path (a future assistant
-would sit after the deterministic voice parser's refusal, inside the same wake session).
-`ControlAction.Parameter` carries the `LaunchApp` target and the `SendKeys` combination.
+("control center"), and the DeepSeek assistant does (source "ai", §4.18): it sits after the
+deterministic parser's refusal, inside the same wake session, and only uses a fixed tool list.
+`ControlAction.Parameter` carries the `LaunchApp` target and the `SendKeys` combination;
+`ControlAction.Request` carries the assistant-era desktop actions' arguments.
 
-**Longer-term directions, not in code:** the assistant layer itself ("Build 2": DeepSeek tool
-calling for app/file/window/web actions, Whisper speech-to-text after the chime, a widget AI
-button with a slide-down chat panel, encrypted local API key), HUD beyond the compact widget,
-more gestures, "move window to display".
+**Longer-term directions, not in code:** Build 2 Shot 2 (compact-widget level ring, AI button,
+slide-down chat panel, media ducking, AI page polish), HUD beyond the compact widget, more
+gestures, "move window to display".
 
 Names still inherited from upstream: assembly/exe `KinectV2MouseControl`, namespace
 `KinectV2MouseControl`, AssemblyVersion `1.2.1.0`, the upstream credit line (now in
@@ -122,6 +122,8 @@ Git Bash (use `-p:` not `/p:`; MSYS rewrites `/p:` as a path):
 |---|---|---|
 | Last-used settings | `%LOCALAPPDATA%\KinectV2MouseControl\KinectV2MouseControl.exe_Url_<hash>\1.2.1.0\user.config` | .NET user settings, **per exe path** (Debug and Release differ). Saved only on normal close. Tuning + mode + the UI settings (`CompactOnMinimize`, `StartCompact`, `OverlayAlwaysOnTop`, `OverlayLeft/Top`, `VoiceEnabled`, `VoiceWakeSensitivity` (0-100), `VoiceCommandThreshold`, `VoiceDismissSound`, `VoiceInputDeviceId` + `VoiceInputDeviceName` = chosen microphone, empty = System Default, wake word `VoiceWakePhrase` (default "Jarvis"; a stale `VoiceWakeWord` = "Kinect" entry from an earlier build is ignored on purpose)) |
 | Profiles | `%LOCALAPPDATA%\KinectHomeOS\profiles.json` | 3 slots, shared by all builds. Atomic write. Unreadable file is moved to `profiles.json.bad`. A slot rename is saved immediately |
+| DeepSeek key | `%LOCALAPPDATA%\KinectHomeOS\secrets\deepseek.key` | DPAPI CurrentUser-encrypted; written only by AI → Test key & save after a successful test call; Remove key deletes it. Never in user.config, logs, Activity or the repo; only sent to `https://api.deepseek.com` (redirects disabled) |
+| AI self-test | `%LOCALAPPDATA%\KinectHomeOS\ai-self-test.txt` | Written by `--ai-self-test` (exit 0 = pass, 4 = fail): dry-run action policies + scripted-model tool loop; `--live` adds 3 real DeepSeek requests in dry run when a key is saved |
 | Local Whisper (Build 2) | `%LOCALAPPDATA%\KinectHomeOS\whisper\` | Default command transcription: `bin\` = whisper.cpp v1.9.4 x64 CPU, `models\ggml-base.en.bin`, `test\*.wav`, `README.md`, `server.log`. Hidden job-owned loopback server, four CPU threads; no audio files saved. Optional test override `KINECTOS_WHISPER_DIR` |
 | Custom voice commands | `%LOCALAPPDATA%\KinectHomeOS\voice-commands.json` | Shared by all builds. Saved ~0.6 s after an edit and on quit, atomic write. Missing = the 3 starters (not written until edited). Unreadable → `voice-commands.json.bad` |
 | Runtime log | `%LOCALAPPDATA%\KinectHomeOS\runtime.log` (+ `runtime.prev.log`) | Human-rate event log, fresh each launch. **Ask the user for it when diagnosing intermittent issues** |
@@ -150,6 +152,8 @@ src/KinectV2MouseControl/
     LiveStatus.cs             bindable engine snapshot (ControlState Off/Standby/Ready/Active, hands, gestures, signal, calibration)
     VoiceViewModel.cs         voice switch, wake word, custom command list, microphone choice/fallback/retry, thresholds, HUD state, decisions/diagnostics; the ONLY place a voice command is executed
     CustomCommandRowViewModel.cs  one editable custom command (phrase, kind, keys + "only in" app, target, action)
+    VoiceViewModel.Assistant.cs   voice ↔ assistant glue: OtherRequest hook, HUD Thinking/result, cancel, custom/built-in runners for the AI
+    AssistantViewModel.cs     AI page: key test/save/remove, model, "Send other requests to AI", typed requests, step log; runs AssistantSession
     ActionsViewModel.cs       catalog grouped by category with Run commands
     DisplaysViewModel.cs      monitor rects + live cursor dot; hand-space geometry (reach rect, thresholds, hand dots)
     ProfileSlotViewModel.cs   one slot: name (rename persists), state, summary, Load/Save
@@ -206,6 +210,10 @@ src/KinectV2MouseControl/
       VoiceSelfTest.cs        --voice-self-test harness (simulated microphone + chime loopback)
       AudioInputDevices.cs    Core Audio capture-device list (IDs, names, default) + AudioDeviceWatcher (IMMNotificationClient)
       MicrophoneCaptureStream.cs  WASAPI capture of one chosen device → 16 kHz mono stream for the recognizer
+    Assistant/
+      DeepSeekClient.cs       AssistantJson, DeepSeekKeyStore (DPAPI), IAssistantModel, DeepSeekClient (fixed endpoint, thinking disabled)
+      AssistantSession.cs     AssistantTools (strict JSON schemas → ControlAction) + the bounded tool loop (6 rounds, 25 s, cancellable)
+      AssistantSelfTest.cs    scripted fake model for --ai-self-test (+ --live dry-run requests)
     Diagnostics/
       RuntimeLog.cs           event log on disk (Suspend() for the smoke test)
       ActivityLog.cs          in-memory recent-activity feed (coalescing), any thread
@@ -751,6 +759,36 @@ looser, Wake Sensitivity moves the floor 0.60-0.90; the isolation gate never mov
   but only reachable through custom voice commands (no Run button, no built-in phrase).
   **Adding an action = enum member + router case + catalog descriptor (+ voice phrase).**
 
+### 4.18 DeepSeek assistant (Build 2 Shot 1, CV)
+
+- **Routing:** a Whisper transcript (or a typed request on the AI page) first goes through the
+  exact local match (`VoiceCommandParser` with the custom phrases). No match → `VoiceIntentKind.
+  Request` → `VoiceViewModel.OtherRequest` → `AssistantViewModel.SubmitAsync`, but only when a
+  key is saved and "Send other requests to AI" (`SendOtherRequestsToAI`, default on) is set;
+  otherwise the HUD says "Not a command". Requests over 4,000 characters are refused.
+- **Model:** `DeepSeekClient` posts OpenAI-style `chat/completions` to the fixed origin
+  `https://api.deepseek.com` (TLS 1.2, redirects off, 20 s timeout), non-streaming, with
+  `thinking: {"type":"disabled"}` (verified against api-docs.deepseek.com during the build).
+  Models: `deepseek-flash` (default) or `deepseek-v4-pro`. Provider error bodies are never
+  shown or logged (they can echo headers); any text containing the key is masked.
+- **Tool loop (`AssistantSession`):** system prompt (tools only, prefer one call, no follow-up
+  questions, never claim success without a confirming result, file names/window titles are
+  untrusted data) + JSON context (monitors, foreground process, enabled custom phrases, assignable
+  built-in action ids). At most 6 tool rounds, 8 calls per round, 25 s overall, cancellable.
+  `AssistantTools.TryParse` rejects unknown tools, unexpected/missing arguments, non-string
+  text, out-of-range monitors; rejections go back to the model as results, never executed.
+- **Tools:** launch_app, open_url, web_search, find_files, open_file, place_window,
+  list_windows, type_text, custom_command (an enabled custom phrase, "only in" check applies),
+  builtin_action (an assignable catalog id). Each is marshalled to the UI thread and executed
+  through `ActionRouter` (`engine.ExecuteRequest`, source "ai"); the policies are §9's
+  Build 2 milestone 2 notes (`SafeDesktopActions`).
+- **Cancellation:** `AssistantViewModel.Cancel` bumps its generation; a new wake
+  (Acknowledging), any voice input-generation change (voice off, restart, microphone switch),
+  a double clap (`GestureControlToggled`), the Cancel button or "cancel" all stop remaining
+  steps. Completed steps are not undone (the HUD says so).
+- **Feedback:** HUD `Thinking` with each step, then the model's one-sentence answer; every
+  step goes to the AI page step log, the Activity feed and runtime.log with timings.
+
 ## 5. Implemented functionality
 
 Status key: **HW** = hardware verified by the user. **CV** = compile verified only, awaiting
@@ -798,6 +836,12 @@ LaunchApp). The old settings window, `ParameterControl` and `HelpWindow` are gon
 Cursor dictation; only one set of window caption buttons; the smoke test no longer saves
 settings. Covered by `--voice-self-test` (parser, rules, key parsing, synthetic "Jarvis" →
 "Claude listen" / "GPT listen"); nothing of it is hardware verified.
+
+**Build 2 Shot 1 (CV, 2026-09-20):** local Whisper transcription after the chime (default;
+Windows grammar mode kept as fallback), bounded desktop actions, and the DeepSeek assistant
+with the AI page (key, model, typed requests, step log). Covered by `--voice-self-test` (four
+real Whisper scenarios), `--ai-self-test` (policies + scripted model) and the smoke test.
+Live DeepSeek calls and everything on hardware are untested.
 
 **Voice (CV + offline acceptance test):** wake-gated state machine, chime, gate, one command
 per wake, deterministic parser, absolute volume (`volume 0-100`), explicit mute/unmute, HUD
@@ -968,7 +1012,7 @@ and returns explicitly partial results after two seconds. Open revalidates the p
 extension and request capability. `--ai-self-test` verifies policies with a dry-run router,
 temporary fixtures, app ambiguity and one/two-monitor geometry including negative origins.
 Report: `%LOCALAPPDATA%\KinectHomeOS\ai-self-test.txt`, exit 0/4. No physical action is tested.
-The cloud assistant and AI controls are the next milestone.
+The DeepSeek assistant built on these actions is §4.18.
 
 1. **Hardware validation of the engine phase** (unchanged):
    - fixed hand roles;
@@ -997,16 +1041,16 @@ The cloud assistant and AI controls are the next milestone.
    and out of the right app, open-app commands, one caption-button set (taskbar minimize, snap,
    help drawer open, Alt+F4 now that there is no system menu).
 7. "Move window to display".
-8. AI assistant layer ("Build 2", agreed design): the Windows recognizer keeps ONLY the wake
-   word; after the chime the utterance is recorded (≤ 10 s, ends on ~0.7 s silence) and
-   transcribed by the local whisper-server (see the Whisper row in §2; ≈ 0.3 s), then an
-   exact local match (built-in phrases, volume, custom commands) runs instantly and anything
-   else goes to DeepSeek (`deepseek-flash`, tool calling) behind a fixed safe tool list (open
-   app/file/URL, place window on monitor/quadrant, catalog actions, type text - no
-   delete/rename/shell). Also: media ducked while listening, a live step view, a widget AI
-   button with a slide-down chat panel, API key encrypted with DPAPI under %LOCALAPPDATA%.
-   To be built by Codex/Astra in two sessions (core pipeline, then UI). The AI page reserves
-   the place; nothing contacts a service yet.
+8. **Build 2 Shot 1 on hardware/network:** save a key (AI → Test key & save), then
+   `--ai-self-test --live`; Jarvis → "set the volume to thirty"; "Claude listen" in/out of
+   Claude; "put ChatGPT on the top right of my second screen" (incl. mixed DPI); "open Edge and
+   search YouTube for lo-fi study music"; "open my resume"; end click and perceived latency
+   (runtime.log has the timings); internet off keeps exact commands local; cancel an AI request
+   with a new wake, voice off and a double clap; app-name ambiguity and file refusals.
+9. **Build 2 Shot 2:** compact-widget level ring, AI button (starts a session without the wake
+   word and opens the panel), slide-down chat panel attached to the widget, media ducking while
+   recording, AI page polish, fixes from Shot 1 hardware testing. Consider asynchronous file
+   indexing if the two-second bounded personal-file search is noticeable.
 
 ## 10. Known gaps / observations
 
@@ -1116,3 +1160,13 @@ The cloud assistant and AI controls are the next milestone.
     kind of full restart.
 33. **A custom key combination limited to an app is only sent when that app's process owns
     the foreground window** (checked at execution time); otherwise nothing is pressed.
+34. **The AI acts only through `AssistantTools`** (strict schemas), the enabled custom phrases
+    and assignable built-ins, executed through `ActionRouter` on the UI thread. No tool may
+    delete, rename or move files, run shell commands or press arbitrary keys; OpenFile needs a
+    same-request FindFiles result plus revalidation; TypeText refuses shells/system tools and
+    KINECT-OS. One authorized unmatched request = one bounded assistant run (≤ 6 rounds, 25 s),
+    cancelled by a new wake, an input-generation change, voice off or a double clap.
+35. **Privacy:** audio and Whisper stay local. DeepSeek receives only one request's text, the
+    monitor layout, the foreground process name, command names and tool results (window titles
+    only via list_windows). The key is DPAPI-encrypted on disk, sent only to
+    `https://api.deepseek.com`, and never logged, displayed or saved elsewhere.

@@ -252,6 +252,11 @@
     <Compile Include="Models\Actions\InstalledApps.cs" />
     <Compile Include="Models\Actions\DesktopWindows.cs" />
     <Compile Include="Models\Actions\AiSelfTest.cs" />
+    <Compile Include="Models\Assistant\DeepSeekClient.cs" />
+    <Compile Include="Models\Assistant\AssistantSession.cs" />
+    <Compile Include="Models\Assistant\AssistantSelfTest.cs" />
+    <Compile Include="ViewModels\AssistantViewModel.cs" />
+    <Compile Include="ViewModels\VoiceViewModel.Assistant.cs" />
     <Compile Include="Models\Voice\PcmTapStream.cs" />
     <Compile Include="Models\Voice\WakeGatedVoiceEngine.Whisper.cs" />
     <Compile Include="Models\Voice\AudioInputDevices.cs" />

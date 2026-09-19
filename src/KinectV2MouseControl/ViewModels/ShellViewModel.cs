@@ -40,6 +40,7 @@ namespace KinectV2MouseControl
 
         public KinectCursorViewModel Engine { get; private set; }
         public VoiceViewModel Voice { get; private set; }
+        public AssistantViewModel Assistant { get; private set; }
         public ActionsViewModel Actions { get; private set; }
         public DisplaysViewModel Displays { get; private set; }
 
@@ -73,6 +74,8 @@ namespace KinectV2MouseControl
 
             Voice = new VoiceViewModel(Engine, dispatcher);
             Voice.ShellCommandRequested += (s, command) => HandleShellCommand(command);
+            Engine.ControlCenterHandler = command => { HandleShellCommand(command); return true; };
+            Assistant = new AssistantViewModel(Engine, Voice, dispatcher);
             Actions = new ActionsViewModel(Engine, HandleShellCommand);
             Displays = new DisplaysViewModel(Engine);
 
@@ -85,7 +88,7 @@ namespace KinectV2MouseControl
                 new NavItem { Section = ShellSection.Displays, Title = "Displays", Subtitle = "Spatial setup & calibration", IconKey = "IconDisplays" },
                 new NavItem { Section = ShellSection.Profiles, Title = "Profiles", Subtitle = "Saved tunings", IconKey = "IconProfiles" },
                 new NavItem { Section = ShellSection.Settings, Title = "Settings", Subtitle = "System, help & diagnostics", IconKey = "IconSettings" },
-                new NavItem { Section = ShellSection.Intelligence, Title = "AI", Subtitle = "Assistant layer", IconKey = "IconAi", Badge = "SOON" }
+                new NavItem { Section = ShellSection.Intelligence, Title = "AI", Subtitle = "Assistant", IconKey = "IconAi", Badge = "BETA" }
             };
             selectedSection = Sections[0];
 
@@ -569,6 +572,8 @@ namespace KinectV2MouseControl
             VoiceSpeechEngine speechEngine;
             Voice.SpeechEngine = Enum.TryParse(s.VoiceSpeechEngine, out speechEngine) ? speechEngine : VoiceSpeechEngine.Whisper;
             Voice.ListeningClick = s.VoiceListeningClick;
+            Assistant.Model = s.AssistantModel;
+            Assistant.SendOtherRequests = s.SendOtherRequestsToAI;
             Voice.SetWakeWord(s.VoiceWakePhrase);
             Voice.SetMicrophonePreference(s.VoiceInputDeviceId, s.VoiceInputDeviceName);
         }
@@ -599,6 +604,8 @@ namespace KinectV2MouseControl
             s.VoiceDismissSound = Voice.DismissSound;
             s.VoiceSpeechEngine = Voice.SpeechEngine.ToString();
             s.VoiceListeningClick = Voice.ListeningClick;
+            s.AssistantModel = Assistant.Model;
+            s.SendOtherRequestsToAI = Assistant.SendOtherRequests;
             s.VoiceWakePhrase = Voice.WakeWord;
             s.VoiceInputDeviceId = Voice.PreferredMicrophoneId;
             s.VoiceInputDeviceName = Voice.PreferredMicrophoneName;
@@ -610,6 +617,7 @@ namespace KinectV2MouseControl
         /// </summary>
         public void Quit()
         {
+            Assistant.Cancel();
             Voice.Shutdown();
             SaveUiSettings();
             ActivityLog.EntryAdded -= ActivityLog_EntryAdded;

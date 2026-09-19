@@ -150,7 +150,7 @@ namespace KinectV2MouseControl
             Bind("calibrate", "calibrate", "Start pointer calibration.", "calibrate pointer"),
             Bind("open", "open control center", "Show the full KINECT-OS window.", "show control center"),
             Bind("compact", "compact mode", "Collapse to the floating widget."),
-            Cancel("cancel", "Close the command window without doing anything.", "never mind"),
+            Cancel("cancel", "Cancel the current request.", "never mind", "stop"),
 
             // Windows
             Bind("nextwindow", "next window", "Switch to the next window."),

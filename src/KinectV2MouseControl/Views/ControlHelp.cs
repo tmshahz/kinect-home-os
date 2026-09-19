@@ -85,6 +85,11 @@ namespace KinectV2MouseControl
         public static readonly List<HelpEntry> Entries = new List<HelpEntry>
         {
             new HelpEntry("Speech engine", "Whisper transcribes one request locally after the chime. Pause to finish. Windows uses the original command grammar and is the automatic fallback if Whisper is unavailable.", null, null, null, null),
+            new HelpEntry("DeepSeek key", "Test and save your key encrypted for this Windows account. Leave the box empty to test the saved key. Remove key deletes the saved credential. The key is sent only to DeepSeek.", null, null, null, null),
+            new HelpEntry("Assistant model", "Choose the DeepSeek model for other requests. Flash is the default. Thinking is disabled to reduce delay.", null, null, null, null),
+            new HelpEntry("Send other requests to AI", "Exact built-in and custom commands stay local. When this is on and a key is saved, other request text can be sent to DeepSeek. Audio remains local.", null, null, null, null),
+            new HelpEntry("Assistant request", "Run a typed request using the same exact-command and AI path as voice. Steps and results appear here and in Activity. Text entry acts on the foreground app; KINECT-OS itself refuses it.", null, null, null, null),
+            new HelpEntry("Cancel assistant", "Cancel remaining steps. A new wake word, switching voice off, or double clap also cancels. Steps already completed are not undone.", null, null, null, null),
             new HelpEntry("End of listening sound", "A short click confirms that recording has finished and your request is being transcribed.", null, null, null, null),
             new HelpEntry("Movement scale",
                 "How far the cursor moves per centimetre of hand movement, in the normal (uncalibrated) mapping. Ignored while Calibrated range is on.",

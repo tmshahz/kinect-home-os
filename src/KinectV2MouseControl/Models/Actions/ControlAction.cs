@@ -86,6 +86,7 @@ namespace KinectV2MouseControl
         /// ("Ctrl+Shift+D", see KeyChord). Used by custom voice commands.
         /// </summary>
         SendKeys,
+        ControlCenterCommand,
 
         LaunchAppByName,
         OpenUrl,
@@ -203,6 +204,7 @@ namespace KinectV2MouseControl
                 case ControlActionType.Unmute: return "Unmute";
                 case ControlActionType.LaunchApp: return "Launch app";
                 case ControlActionType.SendKeys: return "Key combination";
+                case ControlActionType.ControlCenterCommand: return "Control center command";
                 case ControlActionType.LaunchAppByName: return "Open installed app";
                 case ControlActionType.OpenUrl: return "Open web page";
                 case ControlActionType.WebSearch: return "Search the web";

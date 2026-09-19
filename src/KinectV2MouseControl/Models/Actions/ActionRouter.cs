@@ -48,6 +48,7 @@ namespace KinectV2MouseControl
         /// </summary>
         public string LastSource { get; private set; }
         public DesktopActionResult LastResult { get; private set; }
+        public Func<string, bool> ControlCenterHandler { get; set; }
 
         /// <summary>Request context carries file capabilities only for this one assistant request.</summary>
         public DesktopActionResult ExecuteRequest(ControlAction action, DesktopActionContext context, string source)
@@ -108,6 +109,10 @@ namespace KinectV2MouseControl
 
             switch (action.Type)
             {
+                case ControlActionType.ControlCenterCommand:
+                    if ((action.Parameter != "open" && action.Parameter != "compact" && action.Parameter != "calibrate")
+                        || ControlCenterHandler == null || !ControlCenterHandler(action.Parameter)) { return false; }
+                    break;
                 case ControlActionType.LeftMouseDown:
                     MouseControl.PressDown();
                     break;

@@ -168,8 +168,8 @@ namespace KinectV2MouseControl
             Custom("openfile", "Open found file", "Open an allowed document or media file found in the same request.", ControlAction.Of(ControlActionType.OpenFile)),
             Custom("listwindows", "List windows", "Read visible window titles, processes and monitor numbers.", ControlAction.Of(ControlActionType.ListWindows)),
             Custom("typetext", "Type text", "Enter up to 500 characters; shells and system tools are refused.", ControlAction.Of(ControlActionType.TypeText)),
-            Planned("intent", "Natural-language intent", "An assistant turns a spoken request into one or more actions from this catalog.",
-                ActionCategory.Intelligence, null),
+            new ActionDescriptor { Id = "intent", Name = "Natural-language requests", Description = "DeepSeek chooses from the bounded tools for one spoken or typed request.",
+                Category = ActionCategory.Intelligence, IsImplemented = true, CanRunFromUi = false },
             Planned("workflow", "Workflows", "Named multi-step routines, e.g. “focus mode” = mute, maximize, next window.",
                 ActionCategory.Intelligence, null)
         };
@@ -267,7 +267,7 @@ namespace KinectV2MouseControl
             d.Name = name;
             d.Description = description;
             d.Category = category;
-            d.Action = ControlAction.Of(ControlActionType.None);
+            d.Action = new ControlAction(ControlActionType.ControlCenterCommand, 0, shellCommand);
             d.ShellCommand = shellCommand;
             d.IsImplemented = true;
             d.CanRunFromUi = true;

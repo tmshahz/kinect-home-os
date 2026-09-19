@@ -108,7 +108,7 @@ namespace KinectV2MouseControl
     /// the previous recognizer - including a command recognized a moment before the switch -
     /// is dropped instead of acted on.
     /// </summary>
-    public class VoiceViewModel : ObservableObject
+    public partial class VoiceViewModel : ObservableObject
     {
         private static readonly TimeSpan OutcomeDisplayTime = TimeSpan.FromMilliseconds(2600);
         private const int MaxDecisions = 14;
@@ -233,6 +233,7 @@ namespace KinectV2MouseControl
 
         private void NewGeneration()
         {
+            CancelAssistant();
             Interlocked.Increment(ref generation);
         }
 
@@ -1509,6 +1510,7 @@ namespace KinectV2MouseControl
             switch (e.Phase)
             {
                 case VoicePhase.Acknowledging:
+                    CancelAssistant();
                     ShowHud(VoiceHudState.Wake, "Wake detected", "✦");
                     outcomeUntilUtc = DateTime.MinValue;
                     break;
@@ -1594,6 +1596,7 @@ namespace KinectV2MouseControl
             if (intent.Kind == VoiceIntentKind.Request)
             {
                 LastCommandText = "“" + e.Phrase + "”";
+                if (OtherRequest != null && OtherRequest(e.Phrase)) { return; }
                 ShowOutcome(VoiceOutcome.NotRecognized, "Not a command: “" + e.Phrase + "”");
                 return;
             }
@@ -2049,6 +2052,7 @@ namespace KinectV2MouseControl
 
         private void ApplyIdleText()
         {
+            if (assistantThinking) { return; }
             if (!isEnabled)
             {
                 PhaseTitle = "VOICE OFF";
@@ -2165,7 +2169,7 @@ namespace KinectV2MouseControl
             {
                 UpdateCountdown();
             }
-            else if (hudVisible && !IsCommandWindowOpen && DateTime.UtcNow >= outcomeUntilUtc)
+            else if (hudVisible && !assistantThinking && !IsCommandWindowOpen && DateTime.UtcNow >= outcomeUntilUtc)
             {
                 HudVisible = false;
                 HudState = VoiceHudState.Hidden;

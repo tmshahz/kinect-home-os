@@ -470,5 +470,21 @@ namespace KinectV2MouseControl.Properties {
             get { return (bool)this["VoiceListeningClick"]; }
             set { this["VoiceListeningClick"] = value; }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("deepseek-flash")]
+        public string AssistantModel
+        {
+            get { return (string)this["AssistantModel"]; }
+            set { this["AssistantModel"] = value; }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool SendOtherRequestsToAI
+        {
+            get { return (bool)this["SendOtherRequestsToAI"]; }
+            set { this["SendOtherRequestsToAI"] = value; }
+        }
     }
 }

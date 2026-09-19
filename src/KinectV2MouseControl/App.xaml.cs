@@ -40,12 +40,7 @@ namespace KinectV2MouseControl
             if (e.Args != null && Array.IndexOf(e.Args, "--ai-self-test") >= 0)
             {
                 RuntimeLog.Suspend();
-                string report;
-                int result = AiSelfTest.Run(out report);
-                Directory.CreateDirectory(RuntimeLog.DirectoryPath);
-                File.WriteAllText(Path.Combine(RuntimeLog.DirectoryPath, "ai-self-test.txt"), report);
-                Console.Error.WriteLine(report);
-                Shutdown(result);
+                RunAiSelfTest(Array.IndexOf(e.Args, "--live") >= 0);
                 return;
             }
 
@@ -73,6 +68,22 @@ namespace KinectV2MouseControl
             MainWindow window = new MainWindow();
             MainWindow = window;
             window.Show();
+        }
+
+        private async void RunAiSelfTest(bool live)
+        {
+            string policy;
+            int code = AiSelfTest.Run(out policy);
+            System.Text.StringBuilder report = new System.Text.StringBuilder(policy);
+            try
+            {
+                if (await AssistantSelfTest.RunAsync(report, live, Dispatcher) != 0) { code = 4; }
+            }
+            catch (Exception ex) { code = 4; report.AppendLine("FAIL assistant check: " + ex.Message); }
+            Directory.CreateDirectory(RuntimeLog.DirectoryPath);
+            File.WriteAllText(Path.Combine(RuntimeLog.DirectoryPath, "ai-self-test.txt"), report.ToString());
+            Console.Error.WriteLine(report);
+            Shutdown(code);
         }
 
         private static int RunVoiceSelfTest(bool whisperOnly)
@@ -312,6 +323,15 @@ namespace KinectV2MouseControl
                 voiceScroll.ScrollToHome();
             }
 
+            shell.Navigate(ShellSection.Intelligence);
+            shell.Assistant.RequestText = "Search YouTube for lo-fi study music";
+            shell.Assistant.Steps.Add("Preview · request received");
+            shell.Assistant.Steps.Add("Preview · ✓ Searched YouTube for lo-fi study music · 920 ms");
+            UserControl aiPage = host != null ? host.Content as UserControl : null;
+            ScrollViewer aiScroll = aiPage != null ? aiPage.Content as ScrollViewer : null;
+            if (aiScroll != null) { aiScroll.ScrollToEnd(); }
+            RenderElement(root, shell, Path.Combine(directory, "shell-Intelligence-steps.png"), width, height, false);
+            shell.Assistant.Steps.Clear();
             shell.Navigate(ShellSection.Home);
             RenderElement(root, shell, Path.Combine(directory, "shell-Home-active.png"), width, height, false);
             shell.Navigate(ShellSection.Gestures);

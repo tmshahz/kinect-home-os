@@ -33,17 +33,20 @@ Current interaction model:
   silence (10 s cap), and transcribes locally. Windows recognizes only the wake word in this
   mode; the selectable Windows fallback retains command grammars. Missing/broken Whisper
   automatically falls back with a notice. Exact local matches route like gestures; unmatched
-  text currently shows "Not a command". **Custom commands** (Voice page → Your commands): the user's own phrase → a key
+  text goes to DeepSeek only with a saved key and "Send other requests to AI" enabled.
+  Otherwise it shows "Not a command". **Custom commands** (Voice page → Your commands): the user's own phrase → a key
   combination (optionally only when a named app is in front, e.g. "Claude listen" →
   Ctrl+Shift+D only in `claude`), opening an app/file/URL, or a built-in action. Starters
   "GPT listen" / "Claude listen" / "Cursor listen" ship with blank keys.
   The microphone is selectable on the Voice page (System Default or a specific input,
   remembered, with automatic fallback when it disappears), with a live input meter, an Input
   level (device gain) slider, a Wake Sensitivity slider (default 65 → confidence floor ≈0.65),
-  and a Test wake word mode that measures but never executes. **AI** = placeholder section only.
+  and a Test wake word mode that measures but never executes. **AI** provides a masked key
+  box, test/save/remove, model choice, typed requests and a live step log. New wake, voice off
+  or double clap cancels remaining assistant steps.
 
-Future (NOT implemented): the DeepSeek assistant, more gestures, "move window to display",
-deeper app control. Build 2 milestone 1 (local Whisper) is implemented.
+Future (NOT implemented): Shot 2 compact-widget redesign (level ring, AI button, chat panel),
+media ducking and polish; more gestures and deeper app control. Build 2 Shot 1 is implemented.
 
 ## 2. Toolchain
 
@@ -99,6 +102,11 @@ Git Bash (dash-style switches, because MSYS mangles `/p:`):
 - `--ai-self-test` performs offline dry-run action checks and writes
   `%LOCALAPPDATA%\KinectHomeOS\ai-self-test.txt` (exit 0 pass, 4 fail). It never launches apps,
   opens personal files, types, or moves windows; its file search uses disposable fixtures.
+  It also checks a scripted model's tool loop, malformed arguments, refusal, timeout,
+  cancellation and round limits. `--live` adds three real DeepSeek requests in dry-run only
+  when a saved key exists; otherwise it clearly reports SKIP.
+- AI key: `%LOCALAPPDATA%\KinectHomeOS\secrets\deepseek.key`, DPAPI CurrentUser encrypted,
+  never user.config/logs/repo. Only sent to `https://api.deepseek.com`; redirects disabled.
 
 - `user.config` (last-used settings): `%LOCALAPPDATA%\KinectV2MouseControl\...exe_Url_<hash>\1.2.1.0\`
   - it is **per exe path**;
@@ -138,6 +146,8 @@ Git Bash (dash-style switches, because MSYS mangles `/p:`):
 | `Models/Actions/ActionCatalog.cs` | Human-readable action index (implemented vs planned) for the Actions page and the voice grammar |
 | `Models/Actions/SafeDesktopActions.cs`, `InstalledApps.cs`, `DesktopWindows.cs` | Bounded desktop actions, per-request file capabilities, installed app lookup, visible windows and physical-pixel work areas |
 | `Models/Actions/AiSelfTest.cs` | `--ai-self-test` dry-run policy and geometry checks |
+| `Models/Assistant/DeepSeekClient.cs`, `AssistantSession.cs`, `AssistantSelfTest.cs` | DPAPI key storage, fixed HTTPS endpoint, strict tool schemas, six-round/25-second loop, scripted/live dry-run tests |
+| `ViewModels/AssistantViewModel.cs`, `VoiceViewModel.Assistant.cs` | Typed/voice routing, Dispatcher tool execution, generation cancellation, HUD, step log and Activity |
 | `Models/Voice/WakeGatedVoiceEngine.cs`, `.Whisper.cs` | Wake/session state machine, Windows fallback, post-gate recording and exact parsing, session/generation authorization |
 | `Models/Voice/PcmTapStream.cs`, `WhisperService.cs` | Owned PCM clock/ring, VAD, hidden local server lifecycle and in-memory transcription |
 | `Models/Voice/VoiceSession.cs`, `VoiceGrammars.cs`, `VoiceCommandParser.cs`, `VoiceCommand.cs` | Session/decision types; SRGS wake + command grammars; deterministic parser (built-in phrases → custom phrases → volume pattern) + `SpokenNumber`; built-in command catalog |
@@ -226,6 +236,8 @@ the right points). Double clap works in every mode except Disabled.
     via `CommandRecognized` → `VoiceViewModel` (`TryAuthorize` + `TryMarkExecuted`).
     Whisper uses only post-gate samples and never loads a command grammar. Results carry
     both session and input generation; recording/transcription is cancelled on restart.
+    An authorized unmatched transcript may create one assistant request with multiple bounded
+    tool steps. New wake/input generation/voice off/double clap cancels remaining steps.
 29. Voice parsing is exact (catalog phrases, then the user's custom phrases by match key, then
     the strict volume pattern); out-of-range volume is refused, never clamped. A custom phrase
     may not shadow a built-in phrase or the volume pattern. Keep `--voice-self-test` passing
@@ -237,6 +249,11 @@ the right points). Double clap works in every mode except Disabled.
 31. A custom key combination limited to an app is sent only when that app's process owns the
     foreground window; otherwise nothing is pressed. Changing the wake word or the set of
     custom phrases is a full recognizer restart, like a microphone change.
+32. AI uses only the explicit AssistantTools schemas, configured custom phrases and assignable
+    built-ins, through ActionRouter on the UI thread. OpenFile requires a same-request search
+    result and revalidation. No shell commands, arbitrary keys, delete/rename/file-move tools.
+33. Audio stays local. DeepSeek receives one request's text, monitor layout, foreground process,
+    command names and tool results; window titles only via ListWindows. Never log the key.
 
 ## 5. Change protocol (every task)
 
@@ -337,8 +354,8 @@ in `runtime.log`.
 
 ## 8. Current backlog
 
-Build 2 progress: milestone 1 (Whisper) and milestone 2 (bounded desktop action layer) are
-implemented, COMPILE VERIFIED. DeepSeek and the AI page are still pending. The new actions
+Build 2 Shot 1 is implemented, COMPILE VERIFIED. Live DeepSeek was not tested because no key
+was saved; use AI → Test key & save, then `--ai-self-test --live`. The new actions
 are parameterized and excluded from the simple custom built-in action picker; they use
 `ActionRouter.ExecuteRequest` with per-request context. File searches are capped at two
 seconds and report partial results; reparse points and network paths are excluded.
@@ -366,5 +383,11 @@ seconds and report partial results; reparse points and network paths are exclude
 4. Expose clutch timings / scroll dead zone in the UI only if hardware testing shows per-user
    tuning is needed.
 5. Smoothing default mismatch (Settings 0.2 vs Default button 0.7).
-6. "Move window to display"; the assistant layer (DeepSeek tool calling + Whisper speech-to-
-   text, "Build 2"), which would sit after a parser refusal, inside the same wake session.
+6. **Build 2 hardware/network checks:** Jarvis → volume thirty; Claude listen in/out of Claude;
+   place ChatGPT top-right on monitor 2 (including mixed DPI); open Edge and search YouTube;
+   find/open resume; end click and perceived latency; internet off keeps exact commands local;
+   cancel during AI using wake → stop, voice off and double clap. Test app ambiguity and file
+   refusals. Nothing in this build is newly HARDWARE VERIFIED.
+7. **Shot 2:** compact-widget level ring, AI button, slide-down chat panel, media ducking and
+   polish. Consider asynchronous indexing if the bounded two-second personal-file search
+   is perceptible on large folders; current results explicitly flag a time-limited search.
