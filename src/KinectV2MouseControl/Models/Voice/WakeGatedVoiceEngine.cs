@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Speech.Recognition;
 using System.Threading;
 
@@ -11,7 +12,11 @@ namespace KinectV2MouseControl
     /// <summary>
     /// Local voice commands, strictly gated by the wake word.
     ///
-    ///   "Kinect"  →  ✦ chime  →  one command  →  back to waiting for "Kinect"
+    ///   "Jarvis"  →  ✦ chime  →  one command  →  back to waiting for "Jarvis"
+    ///
+    /// The wake word is the user's choice ("Jarvis" by default, originally "Kinect"); every
+    /// check below applies to whatever it is. Custom command phrases join the command grammar
+    /// and are judged exactly like the built-in ones.
     ///
     /// Why the first version fired commands out of ordinary conversation: it loaded a single
     /// closed grammar, "Kinect" + command, and executed whatever that grammar reported. A
@@ -34,7 +39,7 @@ namespace KinectV2MouseControl
     ///     phrases start within ~0.1 s of the speech.
     ///  3. The gate. The command window opens at the audio position captured when the chime
     ///     (plus output and input latency) has finished. A command must begin after it, so the
-    ///     chime's own echo and any sentence that ran on from "Kinect" can never be a command.
+    ///     chime's own echo and any sentence that ran on from the wake word can never be a command.
     ///  4. One command per wake, consumed on acceptance; unknown speech, a timeout or a
     ///     "cancel" also close the session.
     ///  5. Confidence floors for the wake word and for commands (see the thresholds).
@@ -48,11 +53,17 @@ namespace KinectV2MouseControl
     public sealed class WakeGatedVoiceEngine : IDisposable
     {
         /// <summary>
-        /// The recognizer's own "high confidence" band starts at 80 (HighConfidenceThreshold,
-        /// queried from the engine). The wake word is the gate for everything else, so it has
-        /// to be in that band.
+        /// Default wake confidence floor, matching the middle "Wake Sensitivity" position the UI
+        /// ships. Field testing showed the earlier 0.80 (the recognizer's HighConfidence band)
+        /// made a deliberate "Kinect" too hard, especially on narrowband Bluetooth mics: genuine
+        /// and false wakes both scored 0.86-0.95, so a high floor rejected real wakes without
+        /// being what actually keeps conversation out. The isolation checks (a pause before the
+        /// word, the word not buried in a sentence, single-word duration) are the real guard, so
+        /// the floor can sit lower - still comfortably above the engine's own 0.60 reject line -
+        /// without weakening safety. Wake Sensitivity moves this floor; it never touches the
+        /// isolation checks.
         /// </summary>
-        public const double DefaultWakeThreshold = 0.80;
+        public const double DefaultWakeThreshold = 0.65;
 
         /// <summary>
         /// Above the engine's own grammar rejection threshold (CFGConfidenceRejectionThreshold
@@ -86,8 +97,11 @@ namespace KinectV2MouseControl
         /// </summary>
         private static readonly TimeSpan WakeMinGapBefore = TimeSpan.FromMilliseconds(300);
 
+        /// <summary>
+        /// A single wake word lasts 0.2-1.1 s; a longer wake phrase is allowed 0.5 s per extra
+        /// word (VoiceWakeWord.MaxDuration).
+        /// </summary>
         private static readonly TimeSpan WakeMinDuration = TimeSpan.FromMilliseconds(200);
-        private static readonly TimeSpan WakeMaxDuration = TimeSpan.FromMilliseconds(1100);
         private static readonly TimeSpan CommandMaxDuration = TimeSpan.FromMilliseconds(3500);
 
         /// <summary>
@@ -155,6 +169,31 @@ namespace KinectV2MouseControl
         private string backendName = "Windows speech recognizer";
 
         /// <summary>
+        /// Asked for (used from the next Start) and in use by the running recognizer. Changing
+        /// either takes a restart, like a microphone change: the grammars are built at Start.
+        /// </summary>
+        private string wakeWord = VoiceWakeWord.Default;
+        private CustomPhraseSet customPhrases = CustomPhraseSet.Empty;
+        private string activeWakeWord = VoiceWakeWord.Default;
+        private CustomPhraseSet activeCustomPhrases = CustomPhraseSet.Empty;
+        private TimeSpan wakeMaxDuration = VoiceWakeWord.MaxDuration(VoiceWakeWord.Default);
+
+        /// <summary>
+        /// The input asked for (null = Windows default) and the one the running recognizer is
+        /// actually bound to. A selected device is captured by <see cref="capture"/>.
+        /// </summary>
+        private string inputDeviceId;
+        private string inputDeviceName;
+        private string activeInputId;
+        private string activeInputName;
+        private MicrophoneCaptureStream capture;
+
+        /// <summary>
+        /// A capture clock more than this far ahead of the recognizer is not trusted.
+        /// </summary>
+        private static readonly TimeSpan MaxCaptureLead = TimeSpan.FromMilliseconds(500);
+
+        /// <summary>
         /// Raised for every judgement worth showing in the diagnostics.
         /// </summary>
         public event EventHandler<VoiceDecision> DecisionMade;
@@ -207,6 +246,42 @@ namespace KinectV2MouseControl
             set { lock (sync) { dismissSoundEnabled = value; } }
         }
 
+        /// <summary>
+        /// The wake word for the next Start (the caller has validated it). A running recognizer
+        /// keeps the one it started with until it is restarted.
+        /// </summary>
+        public string WakeWord
+        {
+            get { lock (sync) { return wakeWord; } }
+            set { lock (sync) { wakeWord = string.IsNullOrWhiteSpace(value) ? VoiceWakeWord.Default : value; } }
+        }
+
+        /// <summary>
+        /// The wake word the running recognizer listens for.
+        /// </summary>
+        public string ActiveWakeWord
+        {
+            get { lock (sync) { return activeWakeWord; } }
+        }
+
+        /// <summary>
+        /// Custom command phrases for the next Start. Like the wake word, a change takes a
+        /// restart, which drops any open session.
+        /// </summary>
+        public CustomPhraseSet CustomPhrases
+        {
+            get { lock (sync) { return customPhrases; } }
+            set { lock (sync) { customPhrases = value ?? CustomPhraseSet.Empty; } }
+        }
+
+        /// <summary>
+        /// The custom phrases the running recognizer's grammar holds.
+        /// </summary>
+        public CustomPhraseSet ActiveCustomPhrases
+        {
+            get { lock (sync) { return activeCustomPhrases; } }
+        }
+
         public VoicePhase Phase
         {
             get { lock (sync) { return phase; } }
@@ -228,11 +303,55 @@ namespace KinectV2MouseControl
         }
 
         /// <summary>
-        /// Input level 0-100 as reported by the recognizer.
+        /// Input level 0-100: measured from the samples when a selected device is captured,
+        /// otherwise as reported by the recognizer.
         /// </summary>
         public int AudioLevel
         {
-            get { return Volatile.Read(ref audioLevel); }
+            get
+            {
+                MicrophoneCaptureStream stream;
+                lock (sync)
+                {
+                    stream = capture;
+                }
+
+                return stream != null ? stream.Level : Volatile.Read(ref audioLevel);
+            }
+        }
+
+        /// <summary>
+        /// Endpoint ID of the microphone to use from the next Start; null or empty = the
+        /// Windows default input. Changing it does not touch a running recognizer: the owner
+        /// restarts it (Stop + Start), which also drops any open session.
+        /// </summary>
+        public string InputDeviceId
+        {
+            get { lock (sync) { return inputDeviceId; } }
+            set { lock (sync) { inputDeviceId = string.IsNullOrEmpty(value) ? null : value; } }
+        }
+
+        /// <summary>
+        /// Display name of <see cref="InputDeviceId"/>, for messages and the log.
+        /// </summary>
+        public string InputDeviceName
+        {
+            get { lock (sync) { return inputDeviceName; } }
+            set { lock (sync) { inputDeviceName = value; } }
+        }
+
+        /// <summary>
+        /// The endpoint the running recognizer is bound to; null for the Windows default (or
+        /// when stopped).
+        /// </summary>
+        public string ActiveInputId
+        {
+            get { lock (sync) { return activeInputId; } }
+        }
+
+        public string ActiveInputName
+        {
+            get { lock (sync) { return activeInputName; } }
         }
 
         public string BackendName
@@ -330,9 +449,21 @@ namespace KinectV2MouseControl
             }
 
             SpeechRecognitionEngine created = null;
-            Grammar wake = null;
+            Grammar wakeGrammarBuilt = null;
             Grammar commands = null;
             Exception failure = null;
+            MicrophoneCaptureStream stream = null;
+            string deviceId;
+            string deviceName;
+            string wake;
+            CustomPhraseSet custom;
+            lock (sync)
+            {
+                deviceId = inputDeviceId;
+                deviceName = inputDeviceName;
+                wake = wakeWord;
+                custom = customPhrases;
+            }
 
             // Built on a thread with no synchronization context, so events are raised on the
             // thread pool whatever thread calls Start.
@@ -347,11 +478,11 @@ namespace KinectV2MouseControl
                     // not adapt towards that.
                     TryUpdateSetting(created, "AdaptationOn", 0);
 
-                    wake = VoiceGrammars.BuildWake(info.Culture);
-                    commands = VoiceGrammars.BuildCommands(info.Culture);
-                    created.LoadGrammar(wake);
+                    wakeGrammarBuilt = VoiceGrammars.BuildWake(info.Culture, wake);
+                    commands = VoiceGrammars.BuildCommands(info.Culture, custom);
+                    created.LoadGrammar(wakeGrammarBuilt);
                     created.LoadGrammar(commands);
-                    wake.Enabled = true;
+                    wakeGrammarBuilt.Enabled = true;
                     commands.Enabled = false;
 
                     created.SpeechDetected += OnSpeechDetected;
@@ -365,6 +496,20 @@ namespace KinectV2MouseControl
                     if (configure != null)
                     {
                         configure(created);
+                        deviceId = null;
+                    }
+                    else if (deviceId != null)
+                    {
+                        // A specific microphone: System.Speech cannot open it by itself, so it
+                        // is captured here and handed over as a live stream.
+                        string openError;
+                        stream = MicrophoneCaptureStream.Open(deviceId, deviceName, out openError);
+                        if (stream == null)
+                        {
+                            throw new InvalidOperationException("“" + (deviceName ?? "the selected microphone") + "”: " + openError);
+                        }
+
+                        created.SetInputToAudioStream(stream, MicrophoneCaptureStream.Format);
                     }
                     else
                     {
@@ -375,8 +520,14 @@ namespace KinectV2MouseControl
                     lock (sync)
                     {
                         recognizer = created;
-                        wakeGrammar = wake;
+                        capture = stream;
+                        activeInputId = deviceId;
+                        activeInputName = deviceId != null ? deviceName : null;
+                        wakeGrammar = wakeGrammarBuilt;
                         commandGrammar = commands;
+                        activeWakeWord = wake;
+                        activeCustomPhrases = custom;
+                        wakeMaxDuration = VoiceWakeWord.MaxDuration(wake);
                         phase = VoicePhase.WakeOnly;
                         session = null;
                         onsets.Clear();
@@ -405,16 +556,22 @@ namespace KinectV2MouseControl
                 lock (sync)
                 {
                     recognizer = null;
+                    capture = null;
+                    activeInputId = null;
+                    activeInputName = null;
                     phase = VoicePhase.Off;
                 }
 
+                CloseCapture(stream);
                 DisposeRecognizer(created);
                 error = failure.Message;
-                RuntimeLog.Write("Voice start failed: " + failure);
+                RuntimeLog.Write("Voice start failed: " + (failure is InvalidOperationException ? failure.Message : failure.ToString()));
                 return false;
             }
 
-            RuntimeLog.Write("Voice started: " + info.Description + ", wake-gated, wake >= "
+            RuntimeLog.Write("Voice started: " + info.Description + ", input "
+                + (deviceId != null ? "“" + deviceName + "” (selected, " + AudioInputDevices.ShortId(deviceId) + ")" : "Windows default")
+                + ", wake word “" + wake + "”, " + custom.Count + " custom command(s), wake >= "
                 + WakeThreshold.ToString("0.00", CultureInfo.InvariantCulture) + ", command >= "
                 + CommandThreshold.ToString("0.00", CultureInfo.InvariantCulture) + ", window "
                 + CommandWindow.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) + " s");
@@ -425,12 +582,17 @@ namespace KinectV2MouseControl
         public void Stop()
         {
             SpeechRecognitionEngine stopping;
+            MicrophoneCaptureStream stoppingCapture;
             bool wasRunning;
             lock (sync)
             {
                 stopping = recognizer;
+                stoppingCapture = capture;
                 wasRunning = phase != VoicePhase.Off;
                 recognizer = null;
+                capture = null;
+                activeInputId = null;
+                activeInputName = null;
                 wakeGrammar = null;
                 commandGrammar = null;
                 phase = VoicePhase.Off;
@@ -443,6 +605,10 @@ namespace KinectV2MouseControl
                 }
             }
 
+            // The stream first: a recognizer blocked in Read gets end-of-stream at once, so it
+            // can be cancelled and disposed without waiting, and the device is released before
+            // any other microphone is opened.
+            CloseCapture(stoppingCapture);
             DisposeRecognizer(stopping);
 
             if (wasRunning)
@@ -473,6 +639,23 @@ namespace KinectV2MouseControl
             catch (Exception ex)
             {
                 RuntimeLog.Write("Voice recognizer dispose: " + ex.Message);
+            }
+        }
+
+        private static void CloseCapture(MicrophoneCaptureStream stream)
+        {
+            if (stream == null)
+            {
+                return;
+            }
+
+            try
+            {
+                stream.Close();
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Write("Microphone close: " + ex.Message);
             }
         }
 
@@ -544,14 +727,23 @@ namespace KinectV2MouseControl
         private void OnRecognizeCompleted(object sender, RecognizeCompletedEventArgs e)
         {
             bool wasOurs;
+            MicrophoneCaptureStream ended = null;
             lock (sync)
             {
                 wasOurs = ReferenceEquals(sender, recognizer);
                 if (wasOurs)
                 {
+                    ended = capture;
                     phase = VoicePhase.Off;
                     session = null;
                     recognizer = null;
+                    capture = null;
+                    activeInputId = null;
+                    activeInputName = null;
+                    wakeGrammar = null;
+                    commandGrammar = null;
+                    utteranceOpen = false;
+                    isHearingSound = false;
                     if (deadlineTimer != null)
                     {
                         deadlineTimer.Change(Timeout.Infinite, Timeout.Infinite);
@@ -564,14 +756,30 @@ namespace KinectV2MouseControl
                 return;
             }
 
-            if (e.Error != null)
+            // A selected microphone that went away ends its stream; say so rather than
+            // reporting a clean end of input.
+            Exception error = e.Error;
+            if (error == null && ended != null && ended.FailureReason != null)
             {
-                RuntimeLog.Write("Voice recognition stopped with error: " + e.Error.Message);
+                error = new IOException("“" + (ended.DeviceName ?? "Microphone") + "”: " + ended.FailureReason);
             }
 
-            ThreadPool.QueueUserWorkItem(_ => DisposeRecognizer(sender as SpeechRecognitionEngine));
-            Raise(PhaseChanged, new VoicePhaseEventArgs(VoicePhase.Off, null, VoiceOutcome.None, e.Error != null ? e.Error.Message : null));
-            Raise(Stopped, e.Error);
+            if (error != null)
+            {
+                RuntimeLog.Write("Voice recognition stopped with error: " + error.Message);
+            }
+            else
+            {
+                RuntimeLog.Write("Voice recognition stopped: the audio input ended");
+            }
+
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                CloseCapture(ended);
+                DisposeRecognizer(sender as SpeechRecognitionEngine);
+            });
+            Raise(PhaseChanged, new VoicePhaseEventArgs(VoicePhase.Off, null, VoiceOutcome.None, error != null ? error.Message : null));
+            Raise(Stopped, error);
         }
 
         private void OnSpeechRecognized(object sender, SpeechRecognizedEventArgs e)
@@ -741,7 +949,7 @@ namespace KinectV2MouseControl
 
         /// <summary>
         /// WakeOnly. The wake grammar is the only grammar enabled, so every utterance comes back
-        /// as a scored "Kinect" hypothesis (or nothing). The only possible outcome of accepting
+        /// as a scored wake-word hypothesis (or nothing). The only possible outcome of accepting
         /// one is a new session in Acknowledging - never an action.
         /// </summary>
         private void EvaluateWake(Evidence ev, Pending pending)
@@ -769,9 +977,9 @@ namespace KinectV2MouseControl
             {
                 reason = "no pause before it (" + F2(ev.GapBefore.Value.TotalSeconds) + " s after other speech)";
             }
-            else if (ev.Duration < WakeMinDuration || ev.Duration > WakeMaxDuration)
+            else if (ev.Duration < WakeMinDuration || ev.Duration > wakeMaxDuration)
             {
-                reason = F2(ev.Duration.TotalSeconds) + " s is not a single word";
+                reason = F2(ev.Duration.TotalSeconds) + " s is not the wake word said once";
             }
 
             if (reason != null)
@@ -783,7 +991,7 @@ namespace KinectV2MouseControl
                     if (ev.EngineAccepted)
                     {
                         RuntimeLog.Write("Voice wake candidate rejected: " + reason + " (confidence " + F2(ev.Confidence)
-                            + ", lead " + F2(ev.Lead.TotalSeconds) + " s, " + F2(ev.Duration.TotalSeconds) + " s)");
+                            + ", lead " + F2(ev.Lead.TotalSeconds) + " s, " + F2(ev.Duration.TotalSeconds) + " s, " + GapText(ev) + ")");
                     }
                 }
                 else
@@ -802,7 +1010,17 @@ namespace KinectV2MouseControl
             pending.Grammars = true;
             pending.ChimeSession = session.Id;
             RuntimeLog.Write("Voice wake #" + session.Id + " accepted (confidence " + F2(ev.Confidence) + ", lead "
-                + F2(ev.Lead.TotalSeconds) + " s, " + F2(ev.Duration.TotalSeconds) + " s)");
+                + F2(ev.Lead.TotalSeconds) + " s, " + F2(ev.Duration.TotalSeconds) + " s, " + GapText(ev) + ")");
+        }
+
+        /// <summary>
+        /// The pause before the utterance as measured: from the end of the previous RECOGNIZED
+        /// phrase. Speech the recognizer produced no phrase for is invisible to it, so this can
+        /// overstate the real silence; it is logged so hardware sessions can be tuned from data.
+        /// </summary>
+        private static string GapText(Evidence ev)
+        {
+            return ev.GapBefore.HasValue ? "gap " + F2(ev.GapBefore.Value.TotalSeconds) + " s" : "gap -";
         }
 
         /// <summary>
@@ -903,7 +1121,7 @@ namespace KinectV2MouseControl
             if (reason == null)
             {
                 string parseReason;
-                if (!VoiceCommandParser.TryParse(ev.Text, out intent, out parseReason))
+                if (!VoiceCommandParser.TryParse(ev.Text, activeCustomPhrases, out intent, out parseReason))
                 {
                     reason = parseReason;
                     intent = null;
@@ -1019,7 +1237,7 @@ namespace KinectV2MouseControl
 
             try
             {
-                TimeSpan position = engine.AudioPosition;
+                TimeSpan position = CurrentAudioPosition(engine);
                 lock (sync)
                 {
                     if (IsCurrent(sessionId, VoicePhase.Acknowledging))
@@ -1055,7 +1273,7 @@ namespace KinectV2MouseControl
             bool havePosition = false;
             try
             {
-                position = engine.AudioPosition;
+                position = CurrentAudioPosition(engine);
                 havePosition = true;
             }
             catch (Exception ex)
@@ -1088,6 +1306,32 @@ namespace KinectV2MouseControl
             }
 
             Run(pending);
+        }
+
+        /// <summary>
+        /// "Now" in audio-stream time. The recognizer's position is what it has read, which can
+        /// trail the microphone by its read size; with a captured device, the capture clock is
+        /// closer to real time, so the later of the two is used (a later gate is only stricter).
+        /// </summary>
+        private TimeSpan CurrentAudioPosition(SpeechRecognitionEngine engine)
+        {
+            TimeSpan position = engine.AudioPosition;
+            MicrophoneCaptureStream stream;
+            lock (sync)
+            {
+                stream = capture;
+            }
+
+            if (stream != null)
+            {
+                TimeSpan captured = stream.CapturedPosition;
+                if (captured > position && captured - position <= MaxCaptureLead)
+                {
+                    position = captured;
+                }
+            }
+
+            return position;
         }
 
         private void ScheduleDeadline(int sessionId, TimeSpan due)
@@ -1236,9 +1480,12 @@ namespace KinectV2MouseControl
             }
         }
 
-        private static VoiceDecision Decision(string stage, VoiceVerdict verdict, Evidence ev, string intent, string reason, int sessionId)
+        /// <summary>
+        /// Called under the state lock (reads the active wake word).
+        /// </summary>
+        private VoiceDecision Decision(string stage, VoiceVerdict verdict, Evidence ev, string intent, string reason, int sessionId)
         {
-            string phrase = ev.IsWake ? VoiceCommandCatalog.WakeWord : (ev.IsCommand ? ev.Text : "");
+            string phrase = ev.IsWake ? activeWakeWord : (ev.IsCommand ? ev.Text : "");
             return new VoiceDecision(stage, verdict, phrase, ev.IsWake || ev.IsCommand ? ev.Confidence : double.NaN,
                 ev.HasAudio ? ev.Lead.TotalSeconds : double.NaN, ev.HasAudio ? ev.Duration.TotalSeconds : double.NaN,
                 ev.GapBefore.HasValue ? ev.GapBefore.Value.TotalSeconds : double.NaN, intent, reason, sessionId);

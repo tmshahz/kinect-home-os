@@ -50,6 +50,14 @@
         Hidden="{x:Null}" Wake="{StaticResource Effect.AccentGlow}" Listening="{StaticResource Effect.AccentGlow}"
         Executed="{StaticResource Effect.SuccessGlow}" Rejected="{x:Null}"/>
 
+    <local:MicrophoneStatusToValueConverter x:Key="MicStatusBrush"
+        Off="{StaticResource Brush.TextFaint}" Ready="{StaticResource Brush.Success}"
+        Reinitializing="{StaticResource Brush.Accent}" Unavailable="{StaticResource Brush.Warning}"/>
+
+    <local:MicZoneToValueConverter x:Key="MicZoneBrush"
+        Quiet="{StaticResource Brush.TextDim}" Good="{StaticResource Brush.Success}" Loud="{StaticResource Brush.Warning}"/>
+    <local:MicZoneToValueConverter x:Key="MicZoneLabel" Quiet="Too quiet" Good="Good level" Loud="Very loud"/>
+
     <!-- A dot that breathes while the command window is open. -->
     <Style x:Key="VoicePulseDot" TargetType="Ellipse">
         <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
@@ -650,6 +658,99 @@
         <Setter Property="Width" Value="76"/>
         <Setter Property="Padding" Value="8,4"/>
         <Setter Property="TextAlignment" Value="Right"/>
+    </Style>
+
+    <!-- ===================================================================================
+         Drop-down (microphone picker)
+         =================================================================================== -->
+
+    <Style x:Key="ComboBox.Item" TargetType="ComboBoxItem">
+        <Setter Property="Foreground" Value="{StaticResource Brush.Text}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Chrome" Background="Transparent" CornerRadius="8" Padding="10,7">
+                        <ContentPresenter/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Brush.SurfaceHover}"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Chrome" Property="Background" Value="{StaticResource Brush.AccentSoft}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ComboBox.Field" TargetType="ComboBox">
+        <Setter Property="FontFamily" Value="{StaticResource Font.Text}"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Foreground" Value="{StaticResource Brush.Text}"/>
+        <Setter Property="Background" Value="{StaticResource Brush.SurfaceInset}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource Brush.SurfaceBorder}"/>
+        <Setter Property="Padding" Value="12,9,36,9"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="MaxDropDownHeight" Value="320"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource ComboBox.Item}"/>
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton x:Name="Toggle" Focusable="False" ClickMode="Press"
+                                      Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="1" CornerRadius="10">
+                                        <Path x:Name="Arrow" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"
+                                              Data="M0,0 L5,5 L10,0" Stroke="{StaticResource Brush.TextDim}" StrokeThickness="1.6"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Brush.SurfaceBorderStrong}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource Brush.Accent}"/>
+                                            <Setter TargetName="Arrow" Property="Stroke" Value="{StaticResource Brush.Accent}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <ContentPresenter IsHitTestVisible="False" Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center" HorizontalAlignment="Stretch"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"/>
+                        <Popup x:Name="PART_Popup" Placement="Bottom" VerticalOffset="4" AllowsTransparency="True" Focusable="False"
+                               PopupAnimation="Fade" IsOpen="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                            <Border MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                    MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                    Background="#F80F1828" BorderBrush="{StaticResource Brush.SurfaceBorderStrong}"
+                                    BorderThickness="1" CornerRadius="10" Padding="4">
+                                <ScrollViewer SnapsToDevicePixels="True">
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- ===================================================================================

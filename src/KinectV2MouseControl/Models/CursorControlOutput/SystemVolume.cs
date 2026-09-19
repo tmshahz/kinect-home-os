@@ -11,6 +11,10 @@ namespace KinectV2MouseControl
     /// ("volume 37") and an explicit mute/unmute need the endpoint itself. Every call opens the
     /// current default endpoint afresh, so switching speakers or headphones is picked up
     /// without any notification plumbing. Nothing here throws: failures come back as a reason.
+    ///
+    /// Success is any non-negative HRESULT: SetMute returns S_FALSE (1) when the endpoint was
+    /// already in the requested state, which is not an error (the first version treated it as
+    /// one, so "volume 50" set the level and then reported failure).
     /// </summary>
     public static class SystemVolume
     {
@@ -109,7 +113,7 @@ namespace KinectV2MouseControl
             {
                 Guid context = Guid.Empty;
                 int hr = endpoint.SetMasterVolumeLevelScalar(percent / 100f, ref context);
-                if (hr != 0)
+                if (hr < 0)
                 {
                     return "SetMasterVolumeLevelScalar HRESULT 0x" + hr.ToString("X8");
                 }
@@ -117,7 +121,7 @@ namespace KinectV2MouseControl
                 if (unmute && percent > 0)
                 {
                     hr = endpoint.SetMute(false, ref context);
-                    if (hr != 0)
+                    if (hr < 0)
                     {
                         return "SetMute HRESULT 0x" + hr.ToString("X8");
                     }
@@ -133,7 +137,7 @@ namespace KinectV2MouseControl
             {
                 Guid context = Guid.Empty;
                 int hr = endpoint.SetMute(mute, ref context);
-                return hr == 0 ? null : "SetMute HRESULT 0x" + hr.ToString("X8");
+                return hr >= 0 ? null : "SetMute HRESULT 0x" + hr.ToString("X8");
             }, out error);
         }
 
@@ -145,13 +149,13 @@ namespace KinectV2MouseControl
             {
                 float scalar;
                 int hr = endpoint.GetMasterVolumeLevelScalar(out scalar);
-                if (hr != 0)
+                if (hr < 0)
                 {
                     return "GetMasterVolumeLevelScalar HRESULT 0x" + hr.ToString("X8");
                 }
 
                 hr = endpoint.GetMute(out isMuted);
-                if (hr != 0)
+                if (hr < 0)
                 {
                     return "GetMute HRESULT 0x" + hr.ToString("X8");
                 }
@@ -177,20 +181,20 @@ namespace KinectV2MouseControl
             bool ok = WithEndpoint(endpoint =>
             {
                 int hr = endpoint.GetMasterVolumeLevelScalar(out before);
-                if (hr != 0)
+                if (hr < 0)
                 {
                     return "get HRESULT 0x" + hr.ToString("X8");
                 }
 
                 Guid context = Guid.Empty;
                 hr = endpoint.SetMasterVolumeLevelScalar(before, ref context);
-                if (hr != 0)
+                if (hr < 0)
                 {
                     return "set HRESULT 0x" + hr.ToString("X8");
                 }
 
                 hr = endpoint.GetMasterVolumeLevelScalar(out after);
-                return hr == 0 ? null : "re-read HRESULT 0x" + hr.ToString("X8");
+                return hr >= 0 ? null : "re-read HRESULT 0x" + hr.ToString("X8");
             }, out error);
 
             detail = ok
@@ -211,7 +215,7 @@ namespace KinectV2MouseControl
                 enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
 
                 int hr = enumerator.GetDefaultAudioEndpoint(eRender, eMultimedia, out device);
-                if (hr != 0 || device == null)
+                if (hr < 0 || device == null)
                 {
                     error = "no default playback device (HRESULT 0x" + hr.ToString("X8") + ")";
                     return false;
@@ -220,7 +224,7 @@ namespace KinectV2MouseControl
                 Guid iid = typeof(IAudioEndpointVolume).GUID;
                 hr = device.Activate(ref iid, CLSCTX_ALL, IntPtr.Zero, out endpointObject);
                 IAudioEndpointVolume endpoint = endpointObject as IAudioEndpointVolume;
-                if (hr != 0 || endpoint == null)
+                if (hr < 0 || endpoint == null)
                 {
                     error = "could not open the volume control (HRESULT 0x" + hr.ToString("X8") + ")";
                     return false;

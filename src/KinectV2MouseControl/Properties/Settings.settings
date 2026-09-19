@@ -92,14 +92,23 @@
     <Setting Name="VoiceEnabled" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>
-    <Setting Name="VoiceWakeThreshold" Type="System.Double" Scope="User">
-      <Value Profile="(Default)">0.8</Value>
+    <Setting Name="VoiceWakeSensitivity" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">65</Value>
     </Setting>
     <Setting Name="VoiceCommandThreshold" Type="System.Double" Scope="User">
       <Value Profile="(Default)">0.7</Value>
     </Setting>
     <Setting Name="VoiceDismissSound" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="VoiceInputDeviceId" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="VoiceInputDeviceName" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="VoiceWakePhrase" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Jarvis</Value>
     </Setting>
   </Settings>
 </SettingsFile>

@@ -34,6 +34,45 @@ namespace KinectV2MouseControl
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
+        private const int GWL_STYLE = -16;
+        private const int WS_SYSMENU = 0x00080000;
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
+        private static extern int GetWindowLong(IntPtr hwnd, int index);
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLong")]
+        private static extern int SetWindowLong(IntPtr hwnd, int index, int value);
+
+        /// <summary>
+        /// Stops DWM drawing its own minimize / maximize / close buttons. With the frame extended
+        /// over the whole window (GlassFrameThickness -1) DWM paints the system caption buttons
+        /// on top of the client area, so they appeared over the app's own, and they were the ones
+        /// that took the clicks. They are drawn because the window has a system menu; removing
+        /// WS_SYSMENU removes them (and Alt+Space). WS_MINIMIZEBOX / WS_MAXIMIZEBOX stay, so the
+        /// taskbar, Win+Arrow and snap layouts keep working.
+        /// </summary>
+        public static void HideSystemCaptionButtons(Window window)
+        {
+            IntPtr hwnd = new WindowInteropHelper(window).Handle;
+            if (hwnd == IntPtr.Zero)
+            {
+                return;
+            }
+
+            try
+            {
+                int style = GetWindowLong(hwnd, GWL_STYLE);
+                if ((style & WS_SYSMENU) != 0)
+                {
+                    SetWindowLong(hwnd, GWL_STYLE, style & ~WS_SYSMENU);
+                }
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Write("Caption buttons not hidden: " + ex.Message);
+            }
+        }
+
         /// <summary>
         /// Applies dark mode, rounded corners and the acrylic backdrop.
         /// </summary>

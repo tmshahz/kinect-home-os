@@ -40,6 +40,24 @@ namespace KinectV2MouseControl
         private const string David = "Microsoft David Desktop";
         private const string Zira = "Microsoft Zira Desktop";
 
+        /// <summary>
+        /// The shipped wake word; the scenarios speak it.
+        /// </summary>
+        private const string Wake = VoiceWakeWord.Default;
+
+        /// <summary>
+        /// The starter custom commands, as the recognition scenarios load them.
+        /// </summary>
+        private static CustomPhraseSet StarterPhrases()
+        {
+            return new CustomPhraseSet(new[]
+            {
+                new KeyValuePair<string, string>("gpt", "GPT listen"),
+                new KeyValuePair<string, string>("claude", "Claude listen"),
+                new KeyValuePair<string, string>("cursor", "Cursor listen")
+            });
+        }
+
         public static int Run(out string report)
         {
             StringBuilder text = new StringBuilder();
@@ -49,8 +67,11 @@ namespace KinectV2MouseControl
 
             failures += TestNumbers(text);
             failures += TestParser(text);
+            failures += TestCustomCommands(text);
+            failures += TestKeyChords(text);
             failures += TestGrammars(text);
             failures += TestSystemVolume(text);
+            failures += TestMicrophones(text);
             failures += TestChime(text);
             failures += TestRecognition(text);
 
@@ -105,8 +126,14 @@ namespace KinectV2MouseControl
             string[][] cases =
             {
                 // input, expected (feedback text, or "-" for refused)
+                new[] { "volume 0", "Volume → 0%" },
+                new[] { "volume 1", "Volume → 1%" },
                 new[] { "volume 43", "Volume → 43%" },
+                new[] { "volume 73", "Volume → 73%" },
+                new[] { "volume 99", "Volume → 99%" },
+                new[] { "volume 100", "Volume → 100%" },
                 new[] { "volume forty three", "Volume → 43%" },
+                new[] { "volume seventy three", "Volume → 73%" },
                 new[] { "Volume forty-three.", "Volume → 43%" },
                 new[] { "volume seventy five", "Volume → 75%" },
                 new[] { "volume fifty", "Volume → 50%" },
@@ -143,6 +170,9 @@ namespace KinectV2MouseControl
                 new[] { "mute please", "-" },
                 new[] { "kinect volume fifty", "-" },
                 new[] { "kinect", "-" },
+                new[] { "jarvis volume fifty", "-" },
+                new[] { "jarvis", "-" },
+                new[] { "claude listen", "-" },
                 new[] { "", "-" },
             };
 
@@ -163,6 +193,176 @@ namespace KinectV2MouseControl
             return failures;
         }
 
+        /// <summary>
+        /// Custom phrases through the parser (built-ins still win, exact matching only), the
+        /// phrase rules, the wake-word rules and acronym spelling.
+        /// </summary>
+        private static int TestCustomCommands(StringBuilder text)
+        {
+            int failures = 0;
+            CustomPhraseSet custom = new CustomPhraseSet(new[]
+            {
+                new KeyValuePair<string, string>("gpt", "GPT listen"),
+                new KeyValuePair<string, string>("claude", "Claude listen"),
+                new KeyValuePair<string, string>("cursor", "Cursor listen"),
+                new KeyValuePair<string, string>("work", "work mode")
+            });
+
+            string[][] parses =
+            {
+                new[] { "GPT listen", "GPT listen" },
+                new[] { "G P T listen", "GPT listen" },
+                new[] { "gpt listen", "GPT listen" },
+                new[] { "Claude, listen.", "Claude listen" },
+                new[] { "cursor listen", "Cursor listen" },
+                new[] { "work mode", "work mode" },
+                new[] { "mute", "Mute" },
+                new[] { "volume fifty", "Volume → 50%" },
+                new[] { "claude listen please", "-" },
+                new[] { "please claude listen", "-" },
+                new[] { "listen", "-" },
+                new[] { "claude", "-" },
+                new[] { "G P listen", "-" },
+            };
+
+            foreach (string[] c in parses)
+            {
+                VoiceIntent intent;
+                string reason;
+                string actual = VoiceCommandParser.TryParse(c[0], custom, out intent, out reason) ? intent.Feedback : "-";
+                if (actual != c[1])
+                {
+                    failures++;
+                    text.AppendLine("  FAIL custom parse '" + c[0] + "' -> " + actual + ", expected " + c[1]);
+                }
+            }
+
+            // Phrase rules: null = allowed.
+            string[][] phrases =
+            {
+                new[] { "Claude listen", "ok" },
+                new[] { "GPT listen", "ok" },
+                new[] { "open my resume", "ok" },
+                new[] { "mute", "refused" },
+                new[] { "never mind", "refused" },
+                new[] { "volume boost", "refused" },
+                new[] { "Jarvis listen", "refused" },
+                new[] { "open tab 2", "refused" },
+                new[] { "", "refused" },
+                new[] { "one two three four five six seven", "refused" },
+            };
+
+            foreach (string[] c in phrases)
+            {
+                string actual = CustomCommandRules.CheckPhrase(c[0], Wake) == null ? "ok" : "refused";
+                if (actual != c[1])
+                {
+                    failures++;
+                    text.AppendLine("  FAIL custom phrase '" + c[0] + "' " + actual + ", expected " + c[1]);
+                }
+            }
+
+            string[][] wakes =
+            {
+                new[] { "Jarvis", "ok" },
+                new[] { "  hey   Jarvis ", "ok" },
+                new[] { "Kinect", "ok" },
+                new[] { "Computer", "ok" },
+                new[] { "", "refused" },
+                new[] { "mute", "refused" },
+                new[] { "cancel", "refused" },
+                new[] { "a b c d", "refused" },
+                new[] { "R2D2", "refused" },
+                new[] { "ok", "refused" },
+            };
+
+            foreach (string[] c in wakes)
+            {
+                string cleaned;
+                string error;
+                string actual = VoiceWakeWord.TryValidate(c[0], out cleaned, out error) ? "ok" : "refused";
+                if (actual != c[1])
+                {
+                    failures++;
+                    text.AppendLine("  FAIL wake word '" + c[0] + "' " + actual + ", expected " + c[1] + (error != null ? " (" + error + ")" : ""));
+                }
+            }
+
+            string[][] spoken =
+            {
+                new[] { "GPT listen", "G P T listen" },
+                new[] { "gpt listen", "G P T listen" },
+                new[] { "Claude listen", "claude listen" },
+                new[] { "AI mode", "A I mode" },
+                new[] { "hey Jarvis", "hey jarvis" },
+            };
+
+            foreach (string[] c in spoken)
+            {
+                string actual = VoicePhrases.GrammarText(c[0]);
+                if (actual != c[1] || VoicePhrases.MatchKey(actual) != VoicePhrases.MatchKey(c[0]))
+                {
+                    failures++;
+                    text.AppendLine("  FAIL grammar text '" + c[0] + "' -> '" + actual + "', expected '" + c[1] + "' with the same match key");
+                }
+            }
+
+            int total = parses.Length + phrases.Length + wakes.Length + spoken.Length;
+            text.AppendLine((failures == 0 ? "PASS" : "FAIL") + "  custom commands: " + total + " checks (parser, phrase rules, wake-word rules, acronym spelling)");
+            return failures;
+        }
+
+        private static int TestKeyChords(StringBuilder text)
+        {
+            int failures = 0;
+            string[][] cases =
+            {
+                // typed, canonical ("-" = refused), virtual keys
+                new[] { "Ctrl+Shift+D", "Ctrl+Shift+D", "11 10 44" },
+                new[] { "left control + left shift + d", "Ctrl+Shift+D", "11 10 44" },
+                new[] { "ctrl+shift+d", "Ctrl+Shift+D", "11 10 44" },
+                new[] { "Shift+Ctrl+D", "Ctrl+Shift+D", "11 10 44" },
+                new[] { "Win+H", "Win+H", "5B 48" },
+                new[] { "F5", "F5", "74" },
+                new[] { "Alt+Space", "Alt+Space", "12 20" },
+                new[] { "Ctrl+5", "Ctrl+5", "11 35" },
+                new[] { "Ctrl+Alt+PgDn", "Ctrl+Alt+PageDown", "11 12 22" },
+                new[] { "Shift", "-", "" },
+                new[] { "Ctrl+", "-", "" },
+                new[] { "Ctrl+D+E", "-", "" },
+                new[] { "Ctrl+Banana", "-", "" },
+                new[] { "", "-", "" },
+            };
+
+            foreach (string[] c in cases)
+            {
+                KeyChord chord;
+                string error;
+                bool ok = KeyChord.TryParse(c[0], out chord, out error);
+                string canonical = ok ? chord.Text : "-";
+                string keys = "";
+                if (ok)
+                {
+                    List<string> hex = new List<string>();
+                    foreach (ushort vk in chord.VirtualKeys())
+                    {
+                        hex.Add(vk.ToString("X2", CultureInfo.InvariantCulture));
+                    }
+
+                    keys = string.Join(" ", hex.ToArray());
+                }
+
+                if (canonical != c[1] || keys != c[2])
+                {
+                    failures++;
+                    text.AppendLine("  FAIL keys '" + c[0] + "' -> " + canonical + " [" + keys + "], expected " + c[1] + " [" + c[2] + "]");
+                }
+            }
+
+            text.AppendLine((failures == 0 ? "PASS" : "FAIL") + "  key combinations: " + cases.Length + " typed forms parsed (nothing is pressed)");
+            return failures;
+        }
+
         private static int TestGrammars(StringBuilder text)
         {
             try
@@ -170,9 +370,11 @@ namespace KinectV2MouseControl
                 CultureInfo culture = new CultureInfo("en-US");
                 using (SpeechRecognitionEngine engine = new SpeechRecognitionEngine(culture))
                 {
-                    engine.LoadGrammar(VoiceGrammars.BuildWake(culture));
-                    engine.LoadGrammar(VoiceGrammars.BuildCommands(culture));
-                    text.AppendLine("PASS  grammars: wake word (explicit pronunciation) and command grammar load; engine CFG rejection threshold "
+                    engine.LoadGrammar(VoiceGrammars.BuildWake(culture, Wake));
+                    engine.LoadGrammar(VoiceGrammars.BuildWake(culture, "Kinect"));
+                    engine.LoadGrammar(VoiceGrammars.BuildWake(culture, "hey Jarvis"));
+                    engine.LoadGrammar(VoiceGrammars.BuildCommands(culture, StarterPhrases()));
+                    text.AppendLine("PASS  grammars: wake words “" + Wake + "”, “Kinect” (explicit pronunciation) and “hey Jarvis”, and the command grammar with custom phrases load; engine CFG rejection threshold "
                         + engine.QueryRecognizerSetting("CFGConfidenceRejectionThreshold") + ", high-confidence band "
                         + engine.QueryRecognizerSetting("HighConfidenceThreshold"));
                 }
@@ -199,9 +401,53 @@ namespace KinectV2MouseControl
 
             string detail;
             bool rewritten = SystemVolume.TryRewriteCurrentLevel(out detail);
-            text.AppendLine((rewritten ? "PASS" : "FAIL") + "  system volume: default endpoint at " + percent + "%"
-                + (muted ? " (muted)" : "") + "; " + detail + " (no audible change)");
-            return rewritten ? 0 : 1;
+
+            // Setting mute to the state it is already in returns S_FALSE, which must count as
+            // success (it is exactly what "volume N" does when the speakers are not muted).
+            string muteError;
+            bool muteSame = SystemVolume.TrySetMute(muted, out muteError);
+            bool ok = rewritten && muteSame;
+            text.AppendLine((ok ? "PASS" : "FAIL") + "  system volume: default endpoint at " + percent + "%"
+                + (muted ? " (muted)" : "") + "; " + detail + "; mute re-set to its current state "
+                + (muteSame ? "accepted" : "FAILED: " + muteError) + " (no audible change)");
+            return ok ? 0 : 1;
+        }
+
+        /// <summary>
+        /// Lists the capture devices (read-only) and checks that a device that is not connected
+        /// is refused cleanly. No microphone is opened.
+        /// </summary>
+        private static int TestMicrophones(StringBuilder text)
+        {
+            string error;
+            List<AudioInputDevice> devices = AudioInputDevices.List(out error);
+            if (error != null)
+            {
+                text.AppendLine("FAIL  microphones: device list unavailable: " + error);
+                return 1;
+            }
+
+            string defaultName = "none";
+            foreach (AudioInputDevice device in devices)
+            {
+                if (device.IsDefault)
+                {
+                    defaultName = device.Name;
+                }
+            }
+
+            WakeGatedVoiceEngine engine = new WakeGatedVoiceEngine();
+            engine.InputDeviceId = "{0.0.1.00000000}.{00000000-0000-0000-0000-000000000000}";
+            engine.InputDeviceName = "Missing test microphone";
+            string startError;
+            bool started = engine.Start(out startError);
+            bool refused = !started && startError != null && startError.Contains("not connected")
+                && engine.ActiveInputId == null && engine.Phase == VoicePhase.Off;
+            engine.Dispose();
+
+            text.AppendLine((refused ? "PASS" : "FAIL") + "  microphones: " + devices.Count + " input device(s) listed, Windows default "
+                + defaultName + "; a missing device is refused (" + (startError ?? "it started") + ")");
+            return refused ? 0 : 1;
         }
 
         private static int TestChime(StringBuilder text)
@@ -230,6 +476,8 @@ namespace KinectV2MouseControl
             public string[] ExpectedCommands = new string[0];
             public Func<ScenarioResult, string> ExtraCheck;
             public double Tail = 1.0;
+            public string WakeWord = Wake;
+            public CustomPhraseSet Custom = StarterPhrases();
 
             public Scenario Say(string words, string voice = David)
             {
@@ -283,24 +531,43 @@ namespace KinectV2MouseControl
                 .Wait(0.7).Say("Set the volume to fifty and then click play.")
                 .Wait(0.6).Say("Did you cancel the order or should I?", Zira));
 
-            scenarios.Add(new Scenario { Name = "Proper wake cycle: Kinect, chime, volume forty three", ExpectedCommands = new[] { "Volume → 43%" } }
-                .Wait(0.8).Say("Kinect").Wait(1.0).Say("volume forty three"));
+            scenarios.Add(new Scenario { Name = "Proper wake cycle: " + Wake + ", chime, volume forty three", ExpectedCommands = new[] { "Volume → 43%" } }
+                .Wait(0.8).Say(Wake).Wait(1.0).Say("volume forty three"));
+
+            scenarios.Add(new Scenario { Name = "Custom command: Claude listen", ExpectedCommands = new[] { "Claude listen" } }
+                .Wait(0.8).Say(Wake).Wait(1.0).Say("Claude listen"));
+
+            scenarios.Add(new Scenario { Name = "Custom command with a spelled acronym: GPT listen", ExpectedCommands = new[] { "GPT listen" } }
+                .Wait(0.8).Say(Wake).Wait(1.0).Say("GPT listen"));
+
+            scenarios.Add(new Scenario { Name = "Custom command without the wake word: Cursor listen" }
+                .Wait(0.8).Say("Cursor listen").Wait(0.8).Say("Claude listen", Zira));
+
+            scenarios.Add(new Scenario
+            {
+                Name = "Another wake word still works: Kinect, chime, mute",
+                WakeWord = "Kinect",
+                ExpectedCommands = new[] { "Mute" }
+            }.Wait(0.8).Say("Kinect").Wait(1.0).Say("mute"));
+
+            scenarios.Add(new Scenario { Name = "The old wake word does nothing once changed: Kinect, mute" }
+                .Wait(0.8).Say("Kinect").Wait(1.0).Say("mute"));
 
             scenarios.Add(new Scenario { Name = "Command without wake: volume one hundred" }
                 .Wait(0.8).Say("volume one hundred").Wait(0.8).Say("mute"));
 
             scenarios.Add(new Scenario { Name = "Second command without another wake", ExpectedCommands = new[] { "Volume → 40%" } }
-                .Wait(0.8).Say("Kinect").Wait(1.0).Say("volume forty").Wait(1.2).Say("mute"));
+                .Wait(0.8).Say(Wake).Wait(1.0).Say("volume forty").Wait(1.2).Say("mute"));
 
             scenarios.Add(new Scenario
             {
                 Name = "Wake then silence: timeout",
                 ExtraCheck = r => r.Outcomes.Contains(VoiceOutcome.TimedOut) ? null : "expected a timeout",
                 Tail = 5.5
-            }.Wait(0.8).Say("Kinect"));
+            }.Wait(0.8).Say(Wake));
 
             scenarios.Add(new Scenario { Name = "Unknown command: purple bananas" }
-                .Wait(0.8).Say("Kinect").Wait(1.0).Say("purple bananas"));
+                .Wait(0.8).Say(Wake).Wait(1.0).Say("purple bananas"));
 
             scenarios.Add(new Scenario { Name = "Conversation containing action words" }
                 .Wait(0.8).Say("I'm playing the video but I paused it because the volume was too high."));
@@ -323,39 +590,39 @@ namespace KinectV2MouseControl
                     return r.Counters != null && r.Counters.Wakes >= 2 ? null : "fewer than two wakes recognized";
                 },
                 Tail = 5.0
-            }.Wait(0.8).Say("Kinect").Wait(5.2).Say("Kinect").Wait(5.2).Say("Kinect"));
+            }.Wait(0.8).Say(Wake).Wait(5.2).Say(Wake).Wait(5.2).Say(Wake));
 
             scenarios.Add(new Scenario { Name = "Out of range: volume two hundred" }
-                .Wait(0.8).Say("Kinect").Wait(1.0).Say("volume two hundred"));
+                .Wait(0.8).Say(Wake).Wait(1.0).Say("volume two hundred"));
 
             scenarios.Add(new Scenario { Name = "Wake word inside a sentence" }
-                .Wait(0.8).Say("I think the Kinect is on the shelf next to the TV.", Zira).Wait(0.6).Say("Yes, the Kinect is plugged in, play it."));
+                .Wait(0.8).Say("I think Jarvis is the computer in Iron Man.", Zira).Wait(0.6).Say("Yes, and Jarvis runs the whole house, play it."));
 
             scenarios.Add(new Scenario
             {
                 Name = "Cancel",
                 ExtraCheck = r => r.Outcomes.Contains(VoiceOutcome.Cancelled) || r.Outcomes.Contains(VoiceOutcome.NotRecognized) ? null : "session did not close"
-            }.Wait(0.8).Say("Kinect").Wait(1.0).Say("cancel"));
+            }.Wait(0.8).Say(Wake).Wait(1.0).Say("cancel"));
 
             scenarios.Add(new Scenario
             {
-                Name = "Combined utterance without waiting: Kinect volume fifty",
+                Name = "Combined utterance without waiting: " + Wake + " volume fifty",
                 ExtraCheck = r => r.Outcomes.Contains(VoiceOutcome.Executed) ? "executed" : null,
                 Tail = 5.0
-            }.Wait(0.8).Say("Kinect volume fifty"));
+            }.Wait(0.8).Say(Wake + " volume fifty"));
 
             scenarios.Add(new Scenario
             {
                 Name = "Wake word, then talking straight on without waiting",
                 ExtraCheck = r => r.Counters == null || r.Counters.Wakes == 0 || r.Outcomes.Count > 0 ? null : "session left open",
                 Tail = 5.0
-            }.Wait(0.8).Say("Kinect").Wait(0.15).Say("is it plugged in? Mute the TV and play the next one.", Zira));
+            }.Wait(0.8).Say(Wake).Wait(0.15).Say("is it plugged in? Mute the TV and play the next one.", Zira));
 
             scenarios.Add(new Scenario { Name = "Two deliberate cycles", ExpectedCommands = new[] { "Mute", "Unmute" } }
-                .Wait(0.8).Say("Kinect").Wait(1.0).Say("mute").Wait(1.5).Say("Kinect").Wait(1.0).Say("unmute"));
+                .Wait(0.8).Say(Wake).Wait(1.0).Say("mute").Wait(1.5).Say(Wake).Wait(1.0).Say("unmute"));
 
             scenarios.Add(new Scenario { Name = "Prompt speaker: command 0.8 s after the wake word", ExpectedCommands = new[] { "Next window" } }
-                .Wait(0.8).Say("Kinect").Wait(0.8).Say("next window"));
+                .Wait(0.8).Say(Wake).Wait(0.8).Say("next window"));
 
             int failures = 0;
             List<double> latencies = new List<double>();
@@ -462,7 +729,13 @@ namespace KinectV2MouseControl
                 .Wait(0.6).Say("I think the Kinect is on the shelf next to the TV.")
                 .Wait(0.6).Say("Contact me tomorrow, I can explain.")
                 .Wait(0.6).Say("Connect four is a fun game.", Zira)
-                .Wait(0.6).Say("Volume up a bit, it's quiet.", Zira);
+                .Wait(0.6).Say("Volume up a bit, it's quiet.", Zira)
+                .Wait(0.6).Say("I watched Iron Man again, and Jarvis is still the best part.")
+                .Wait(0.6).Say("Travis said he would be here by eight.", Zira)
+                .Wait(0.6).Say("Put the jars back in the service cupboard.")
+                .Wait(0.6).Say("Can you tell Claude to listen to this one?", Zira)
+                .Wait(0.6).Say("Harvest season is when the farm gets busy.")
+                .Wait(0.6).Say("My cursor keeps jumping when I type.", Zira);
 
             ScenarioResult quiet = RunScenario(conversation, WakeGatedVoiceEngine.DefaultWakeThreshold, WakeGatedVoiceEngine.DefaultCommandThreshold);
             VoiceCounters c = quiet.Counters ?? new VoiceCounters();
@@ -474,18 +747,19 @@ namespace KinectV2MouseControl
             AppendDetail(text, quiet);
 
             Scenario carryOn = new Scenario { Name = "Real wakes, then people just carry on talking", Tail = 4.5 }
-                .Wait(0.8).Say("Kinect").Wait(1.0).Say("and then it connected, and then it dropped again.", Zira)
-                .Wait(2.5).Say("Kinect").Wait(0.9).Say("I was playing something earlier and then paused it.")
-                .Wait(2.5).Say("Kinect").Wait(1.1).Say("Mute the TV when the ads come on.", Zira)
-                .Wait(2.5).Say("Kinect").Wait(1.0).Say("Next, can I ask you something?")
-                .Wait(2.5).Say("Kinect").Wait(1.2).Say("Please, play it again.", Zira);
+                .Wait(0.8).Say(Wake).Wait(1.0).Say("and then it connected, and then it dropped again.", Zira)
+                .Wait(2.5).Say(Wake).Wait(0.9).Say("I was playing something earlier and then paused it.")
+                .Wait(2.5).Say(Wake).Wait(1.1).Say("Mute the TV when the ads come on.", Zira)
+                .Wait(2.5).Say(Wake).Wait(1.0).Say("Next, can I ask you something?")
+                .Wait(2.5).Say(Wake).Wait(1.2).Say("Please, play it again.", Zira)
+                .Wait(2.5).Say(Wake).Wait(1.0).Say("Claude is listening to music in the other room.");
 
             ScenarioResult talk = RunScenario(carryOn, WakeGatedVoiceEngine.DefaultWakeThreshold, WakeGatedVoiceEngine.DefaultCommandThreshold);
             VoiceCounters t = talk.Counters ?? new VoiceCounters();
             bool talkOk = talk.Error == null && talk.Commands.Count == 0;
             text.AppendLine((talkOk ? "PASS" : "FAIL") + "  " + carryOn.Name);
             text.AppendLine("        " + talk.AudioSeconds.ToString("0.0", CultureInfo.InvariantCulture) + " s audio; commands "
-                + talk.Commands.Count + "; wakes " + t.Wakes + " of 5; outcomes ["
+                + talk.Commands.Count + "; wakes " + t.Wakes + " of 6; outcomes ["
                 + string.Join(", ", talk.Outcomes.ConvertAll(o => o.ToString()).ToArray()) + "]");
             AppendDetail(text, talk);
 
@@ -548,6 +822,8 @@ namespace KinectV2MouseControl
             WakeGatedVoiceEngine engine = new WakeGatedVoiceEngine();
             engine.Feedback = feedback;
             engine.InputConfigurator = recognizer => recognizer.SetInputToAudioStream(microphone, Format);
+            engine.WakeWord = scenario.WakeWord;
+            engine.CustomPhrases = scenario.Custom;
             engine.WakeThreshold = wakeThreshold;
             engine.CommandThreshold = commandThreshold;
             engine.DismissSoundEnabled = false;
@@ -684,14 +960,14 @@ namespace KinectV2MouseControl
                 synthesizer.SelectVoice(voice);
                 synthesizer.SetOutputToAudioStream(stream, Format);
 
-                // "Kinect" with the same pronunciation the wake grammar expects.
+                // "Kinect" with the same pronunciation its wake grammar gives it.
                 PromptBuilder prompt = new PromptBuilder();
                 string[] pieces = words.Split(' ');
                 StringBuilder run = new StringBuilder();
                 foreach (string piece in pieces)
                 {
                     string bare = piece.Trim(',', '.', '?', '!');
-                    if (bare.Equals(VoiceCommandCatalog.WakeWord, StringComparison.OrdinalIgnoreCase))
+                    if (bare.Equals("Kinect", StringComparison.OrdinalIgnoreCase))
                     {
                         if (run.Length > 0)
                         {
@@ -699,7 +975,7 @@ namespace KinectV2MouseControl
                             run.Clear();
                         }
 
-                        prompt.AppendTextWithPronunciation(VoiceCommandCatalog.WakeWord, VoiceGrammars.WakePronunciationIpa);
+                        prompt.AppendTextWithPronunciation("Kinect", VoiceWakeWord.KinectPronunciationIpa);
                         string trailing = piece.Substring(piece.IndexOf(bare, StringComparison.Ordinal) + bare.Length);
                         if (trailing.Length > 0)
                         {

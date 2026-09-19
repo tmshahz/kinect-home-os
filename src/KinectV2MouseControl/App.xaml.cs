@@ -109,6 +109,7 @@ namespace KinectV2MouseControl
             {
                 ShellViewModel shell = new ShellViewModel(Dispatcher.CurrentDispatcher);
                 MainWindow window = new MainWindow(shell);
+                window.IsOffscreenCheck = true;   // closing at exit must not save anything
                 report += "MainWindow: ok\n";
 
                 foreach (UserControl page in window.Pages)
@@ -212,7 +213,8 @@ namespace KinectV2MouseControl
             // width directly on the named element for the capture.
             shell.Navigate(ShellSection.Gestures);
             HelpHub.Show("Cursor smoothing", true);
-            System.Windows.Controls.Border drawer = root.FindName("HelpDrawer") as System.Windows.Controls.Border;
+            // The name scope belongs to the window; the detached root can no longer reach it.
+            System.Windows.Controls.Border drawer = window.FindName("HelpDrawer") as System.Windows.Controls.Border;
             if (drawer != null)
             {
                 drawer.BeginAnimation(FrameworkElement.WidthProperty, null);
@@ -265,12 +267,27 @@ namespace KinectV2MouseControl
             ActivityLog.Post(ActivityKind.Action, "Right click", "Right-hand lasso", "gesture");
             ActivityLog.Post(ActivityKind.Action, "Scroll up", "Left fist clutch", "gesture", "scroll+", 1.5);
             ActivityLog.Post(ActivityKind.Action, "Scroll up", "Left fist clutch", "gesture", "scroll+", 1.5);
-            ActivityLog.Post(ActivityKind.Voice, "Voice commands on", "Wake word “Kinect”", "control center");
+            ActivityLog.Post(ActivityKind.Voice, "Voice commands on", "Wake word " + shell.Voice.WakeWordQuoted, "control center");
             shell.Voice.PreviewHud(VoiceHudState.Listening);
             shell.Navigate(ShellSection.Voice);
             RenderElement(root, shell, Path.Combine(directory, "shell-Voice-listening.png"), width, height, false);
             shell.Voice.PreviewHud(VoiceHudState.Executed);
             RenderElement(root, shell, Path.Combine(directory, "shell-Voice-executed.png"), width, height, false);
+
+            // The microphone card sits at the bottom of the Voice page: scroll there too.
+            System.Windows.Controls.ContentControl host = window.FindName("PageHost") as System.Windows.Controls.ContentControl;
+            System.Windows.Controls.UserControl voicePage = host != null ? host.Content as System.Windows.Controls.UserControl : null;
+            System.Windows.Controls.ScrollViewer voiceScroll = voicePage != null ? voicePage.Content as System.Windows.Controls.ScrollViewer : null;
+            FrameworkElement micBox = voicePage != null ? voicePage.FindName("MicrophoneBox") as FrameworkElement : null;
+            UIElement voiceContent = voiceScroll != null ? voiceScroll.Content as UIElement : null;
+            if (voiceScroll != null && micBox != null && voiceContent != null)
+            {
+                Point micAt = micBox.TranslatePoint(new Point(0, 0), voiceContent);
+                voiceScroll.ScrollToVerticalOffset(Math.Max(0, micAt.Y - 260));
+                RenderElement(root, shell, Path.Combine(directory, "shell-Voice-microphone.png"), width, height, false);
+                voiceScroll.ScrollToHome();
+            }
+
             shell.Navigate(ShellSection.Home);
             RenderElement(root, shell, Path.Combine(directory, "shell-Home-active.png"), width, height, false);
             shell.Navigate(ShellSection.Gestures);

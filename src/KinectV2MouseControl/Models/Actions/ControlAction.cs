@@ -79,7 +79,13 @@ namespace KinectV2MouseControl
         /// <summary>
         /// Starts a program, document or URL. Parameter carries the target.
         /// </summary>
-        LaunchApp
+        LaunchApp,
+
+        /// <summary>
+        /// Presses a key combination in the foreground window. Parameter carries it as text
+        /// ("Ctrl+Shift+D", see KeyChord). Used by custom voice commands.
+        /// </summary>
+        SendKeys
     }
 
     /// <summary>
@@ -146,6 +152,11 @@ namespace KinectV2MouseControl
             return new ControlAction(ControlActionType.SetVolume, percent);
         }
 
+        public static ControlAction Keys(string chord)
+        {
+            return new ControlAction(ControlActionType.SendKeys, 0, chord);
+        }
+
         /// <summary>
         /// Human-readable name, shared by the diagnostics readout, the activity feed and the
         /// control center's action catalog.
@@ -180,6 +191,7 @@ namespace KinectV2MouseControl
                 case ControlActionType.Mute: return "Mute";
                 case ControlActionType.Unmute: return "Unmute";
                 case ControlActionType.LaunchApp: return "Launch app";
+                case ControlActionType.SendKeys: return "Key combination";
                 default: return type.ToString();
             }
         }
@@ -196,6 +208,11 @@ namespace KinectV2MouseControl
             if (Type == ControlActionType.LaunchApp && !string.IsNullOrEmpty(Parameter))
             {
                 return "Launch " + Parameter;
+            }
+
+            if (Type == ControlActionType.SendKeys && !string.IsNullOrEmpty(Parameter))
+            {
+                return "Keys " + Parameter;
             }
 
             if (Type == ControlActionType.SetVolume)

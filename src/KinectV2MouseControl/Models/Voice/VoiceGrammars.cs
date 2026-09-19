@@ -10,37 +10,57 @@ namespace KinectV2MouseControl
     /// The two closed grammars the wake-gated engine switches between. There is no grammar that
     /// contains both the wake word and a command, so no single utterance can ever be both.
     ///
-    /// Wake: exactly one word, "Kinect", with its pronunciation given explicitly (IPA
-    /// /kɪˈnɛkt/) so the recognizer does not have to guess it by letter-to-sound rules. The
-    /// schwa form /kəˈnɛkt/ is deliberately not listed: that is "connect", which people do say.
+    /// Wake: exactly the user's wake word (one to three words, "Jarvis" by default), as listed
+    /// by VoicePhrases.GrammarTokens: acronyms spelled, and "Kinect" with its pronunciation
+    /// given explicitly (IPA /kɪˈnɛkt/) so the recognizer does not guess it by letter-to-sound
+    /// rules; the schwa form /kəˈnɛkt/ is deliberately not listed - that is "connect", which
+    /// people do say.
     ///
-    /// Commands: every catalog phrase plus the volume forms. Volume numbers include 101-999 on
-    /// purpose, so "volume two hundred" is heard as two hundred and refused by the parser,
-    /// instead of being bent to the nearest listed number ("one hundred") and executed.
+    /// Commands: every catalog phrase, the user's custom phrases and the volume forms. Volume
+    /// numbers include 101-999 on purpose, so "volume two hundred" is heard as two hundred and
+    /// refused by the parser, instead of being bent to the nearest listed number ("one
+    /// hundred") and executed.
     /// </summary>
     internal static class VoiceGrammars
     {
         public const string WakeGrammarName = "KINECT-OS wake word";
         public const string CommandGrammarName = "KINECT-OS commands";
 
-        /// <summary>
-        /// /kɪˈnɛkt/
-        /// </summary>
-        public const string WakePronunciationIpa = "kɪˈnɛkt";
-
-        public static Grammar BuildWake(CultureInfo culture)
+        public static Grammar BuildWake(CultureInfo culture, string wakeWord)
         {
+            List<VoicePhrases.Token> tokens = VoicePhrases.GrammarTokens(wakeWord);
+            if (tokens.Count == 0)
+            {
+                throw new InvalidOperationException("No wake word to listen for.");
+            }
+
             try
             {
                 SrgsRule rule = new SrgsRule("wake");
-                SrgsToken token = new SrgsToken(VoiceCommandCatalog.WakeWord);
-                token.Pronunciation = WakePronunciationIpa;
-                rule.Add(new SrgsItem(token));
+                SrgsItem phrase = new SrgsItem();
+                bool pronounced = false;
+                foreach (VoicePhrases.Token part in tokens)
+                {
+                    SrgsToken token = new SrgsToken(part.Text);
+                    if (part.Pronunciation != null)
+                    {
+                        token.Pronunciation = part.Pronunciation;
+                        pronounced = true;
+                    }
+
+                    phrase.Add(token);
+                }
+
+                rule.Add(phrase);
 
                 SrgsDocument document = new SrgsDocument();
                 document.Culture = culture;
                 document.Mode = SrgsGrammarMode.Voice;
-                document.PhoneticAlphabet = SrgsPhoneticAlphabet.Ipa;
+                if (pronounced)
+                {
+                    document.PhoneticAlphabet = SrgsPhoneticAlphabet.Ipa;
+                }
+
                 document.Rules.Add(rule);
                 document.Root = rule;
 
@@ -53,7 +73,7 @@ namespace KinectV2MouseControl
                 // Letter-to-sound gives the same pronunciation on the en-US recognizer; the
                 // explicit form is belt and braces.
                 RuntimeLog.Write("Wake grammar pronunciation not accepted (" + ex.Message + "); using letter-to-sound");
-                GrammarBuilder builder = new GrammarBuilder(VoiceCommandCatalog.WakeWord);
+                GrammarBuilder builder = new GrammarBuilder(VoicePhrases.GrammarText(wakeWord));
                 builder.Culture = culture;
                 Grammar grammar = new Grammar(builder);
                 grammar.Name = WakeGrammarName;
@@ -67,7 +87,7 @@ namespace KinectV2MouseControl
         /// compile in System.Speech ("'' rule reference not defined"); named rules sidestep that
         /// and make the structure plain.
         /// </summary>
-        public static Grammar BuildCommands(CultureInfo culture)
+        public static Grammar BuildCommands(CultureInfo culture, CustomPhraseSet custom)
         {
             SrgsDocument document = new SrgsDocument();
             document.Culture = culture;
@@ -101,6 +121,19 @@ namespace KinectV2MouseControl
                     if (!string.IsNullOrWhiteSpace(phrase) && seen.Add(phrase))
                     {
                         all.Add(new SrgsItem(phrase));
+                        phrases++;
+                    }
+                }
+            }
+
+            if (custom != null)
+            {
+                foreach (CustomPhraseSet.Entry entry in custom.Entries)
+                {
+                    string spoken = VoicePhrases.GrammarText(entry.Phrase);
+                    if (spoken.Length > 0 && seen.Add(spoken))
+                    {
+                        all.Add(new SrgsItem(spoken));
                         phrases++;
                     }
                 }

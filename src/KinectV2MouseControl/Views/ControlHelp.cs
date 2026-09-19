@@ -251,21 +251,63 @@ namespace KinectV2MouseControl
                 null, null, null, null),
 
             new HelpEntry("Voice commands",
-                "Wake-gated local voice control. Say “Kinect” on its own and wait for the chime; the next " +
-                "4 seconds accept exactly one command, then it goes back to waiting for “Kinect”. " +
+                "Wake-gated local voice control. Say the wake word (“Jarvis” unless you changed it) on its own and wait " +
+                "for the chime; the next 4 seconds accept exactly one command, then it goes back to waiting for the wake word. " +
                 "Nothing else is acted on: commands said without the wake cycle, a second command after the " +
-                "first, and “Kinect” in the middle of a sentence are all ignored. Recognition runs on this PC " +
+                "first, and the wake word in the middle of a sentence are all ignored. Recognition runs on this PC " +
                 "(Windows speech recognizer); commands go through the same action router as gestures. " +
-                "If the Kinect starts reconnecting after enabling it, use a different default microphone.",
+                "If the Kinect starts reconnecting after enabling it, pick a different microphone below.",
                 null, null, null, null),
 
-            new HelpEntry("Wake confidence",
-                "How sure the recognizer must be that it heard “Kinect” (on its own) before it chimes and opens a command window. " +
-                "The last wake readout on this page shows the confidence of every near miss, so you can see where your voice lands.",
-                "fewer false wakes from conversation, TV and similar-sounding words.",
-                "“Kinect” is accepted more readily from across the room or when said quickly.",
-                "you have to repeat “Kinect”, or it never chimes at all.",
-                "it chimes on its own during conversation (no command runs without one, but it is distracting)."),
+            new HelpEntry("Wake word",
+                "The word you say to get KINECT-OS's attention, “Jarvis” by default. Type one to three words and press Apply " +
+                "(or Enter); the recognizer restarts with it. Distinctive names work best - a word you use in everyday " +
+                "conversation will chime more often (though a chime alone never runs anything). It can't be a command " +
+                "phrase, and custom commands can't contain it. Use Test wake word to see how confidently your voice is heard.",
+                null, null, null, null),
+
+            new HelpEntry("Custom commands",
+                "Your own phrases for after the chime. Each one either presses a key combination (e.g. an app's dictation " +
+                "shortcut), opens an app, file or web address, or runs a built-in action. A key combination can be limited to " +
+                "one app: then it is only pressed when that app is the window in front, and nothing happens otherwise. " +
+                "Click the Keys box and press the shortcut to record it, or type it (Ctrl+Shift+D). A command needs a phrase " +
+                "that is not already a built-in command and does not contain the wake word; one with a problem stays in the " +
+                "list, marked, but is not listened for. Saved automatically to voice-commands.json.",
+                null, null, null, null),
+
+            new HelpEntry("Microphone",
+                "Which input KINECT-OS listens on. System Default follows the Windows default input device; picking a " +
+                "specific microphone (Kinect array, laptop mic, headset) captures that device directly, whatever the " +
+                "Windows default is. Switching restarts the recognizer: any open command window is dropped and it goes " +
+                "back to waiting for the wake word - nothing is executed during the switch. The choice is remembered. If the " +
+                "chosen microphone disappears (unplugged, Bluetooth dropped) voice falls back to System Default and " +
+                "returns to your choice when it reconnects.",
+                null, null, null, null),
+
+            new HelpEntry("Wake Sensitivity",
+                "How readily the wake word is accepted. It moves only the confidence the recognizer needs; it does not change the " +
+                "checks that keep conversation out (a short pause before the word, the word said on its own and not buried in a " +
+                "sentence), so even at maximum a false wake only opens the listening window - it never runs a command. Use Test " +
+                "wake word to see the confidence your voice actually lands at.",
+                "the wake word is accepted more readily - at a normal volume, from further away, or through a Bluetooth mic.",
+                "only a clear, confident wake word wakes it.",
+                "it sometimes chimes on its own during conversation (distracting, but no command runs without one).",
+                "you have to repeat the wake word, raise your voice, or turn up the input level."),
+
+            new HelpEntry("Input level",
+                "The Windows input level of the selected microphone - the same slider as Sound settings. Turn it up if the meter " +
+                "barely moves when you speak, or down if it is pinned at the top. This is the strength of the signal, separate " +
+                "from Wake Sensitivity (how willing the recognizer is). Some devices do not allow it to be set and show read-only.",
+                "a quiet microphone is boosted, so speech reaches the recognizer.",
+                "a hot microphone that clips is calmed down.",
+                "the signal clips and recognition gets worse.",
+                "the microphone is too quiet to recognize reliably."),
+
+            new HelpEntry("Test wake word",
+                "A tuning mode: the full wake pipeline runs so you can see the confidence and the live level, but nothing is ever " +
+                "carried out - no volume change, no window action, no key pressed. Say the wake word, read the confidence, adjust Wake Sensitivity or " +
+                "Input level, and compare microphones safely. Turn it off (or switch voice off) to leave test mode.",
+                null, null, null, null),
 
             new HelpEntry("Command confidence",
                 "How sure the recognizer must be about the phrase you say after the chime. " +

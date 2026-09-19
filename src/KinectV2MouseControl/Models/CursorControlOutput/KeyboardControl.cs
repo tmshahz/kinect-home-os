@@ -106,6 +106,24 @@ namespace KinectV2MouseControl
         }
 
         /// <summary>
+        /// A user-defined key combination (custom voice commands): every modifier down, the key
+        /// down and up, the modifiers up in reverse order, all in one SendInput batch so no
+        /// modifier can be left held. Scan codes are included for browser-based apps.
+        /// </summary>
+        public static void SendChord(KeyChord chord)
+        {
+            ushort[] keys = chord.VirtualKeys();
+            Win32Input.INPUT[] inputs = new Win32Input.INPUT[keys.Length * 2];
+            for (int i = 0; i < keys.Length; i++)
+            {
+                inputs[i] = Win32Input.CreateKeyInputWithScanCode(keys[i], false);
+                inputs[keys.Length * 2 - 1 - i] = Win32Input.CreateKeyInputWithScanCode(keys[i], true);
+            }
+
+            Win32Input.Send(inputs);
+        }
+
+        /// <summary>
         /// Modifier held around a key tap. Sending the whole chord in one batch means the
         /// modifier can never be left pressed if something interrupts between the events.
         /// </summary>

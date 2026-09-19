@@ -10,7 +10,7 @@ namespace KinectV2MouseControl
         BuiltIn,
 
         /// <summary>
-        /// Defined by the user (planned: not editable in this version).
+        /// Defined by the user on the Voice page (CustomCommandDefinition).
         /// </summary>
         Custom,
 
@@ -43,8 +43,8 @@ namespace KinectV2MouseControl
     /// in-process Windows recognizer against a closed grammar, and only while a command window
     /// is open (see WakeGatedVoiceEngine), so nothing leaves the machine.
     ///
-    /// Future custom and assistant-routed commands use this same shape, which is why Source
-    /// exists even though only BuiltIn entries are created.
+    /// Custom commands are stored separately (CustomCommandDefinition) and reach the grammar
+    /// and parser through CustomPhraseSet; assistant-routed commands are still planned.
     /// </summary>
     public class VoiceCommand
     {
@@ -141,12 +141,6 @@ namespace KinectV2MouseControl
     /// </summary>
     public static class VoiceCommandCatalog
     {
-        /// <summary>
-        /// Fixed. It is a word nobody says by accident, and the recognizer is given its exact
-        /// pronunciation (see VoiceGrammars).
-        /// </summary>
-        public const string WakeWord = "Kinect";
-
         public static readonly VoiceCommand[] BuiltIn = new VoiceCommand[]
         {
             // System
@@ -188,8 +182,8 @@ namespace KinectV2MouseControl
             Bind("nexttrack", "next track", "Skip to the next track."),
             Bind("prevtrack", "previous track", "Go back a track."),
 
-            // Planned (shown, not in the grammar)
-            Bind("launch", "open …", "Launch a named app (custom commands, planned)."),
+            // Planned (shown, not in the grammar). Opening apps and pressing app shortcuts are
+            // custom commands: the phrase is the user's (see CustomVoiceCommands).
             Bind("movedisplay", "move to display …", "Move the window to another monitor (planned).")
         };
 

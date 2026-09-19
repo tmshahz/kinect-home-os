@@ -9,7 +9,7 @@ namespace KinectV2MouseControl
     /// enabled there is the one-word wake grammar, and the only thing a wake can do is move to
     /// Acknowledging.
     ///
-    ///   Off ─start→ WakeOnly ─"Kinect"→ Acknowledging ─chime done→ Listening
+    ///   Off ─start→ WakeOnly ─wake word→ Acknowledging ─chime done→ Listening
     ///                  ↑                       │                        │
     ///                  └───── spoke too early ─┘   command / unknown / timeout / cancel
     ///                  └─────────────────────────────────────────────────┘
@@ -19,7 +19,7 @@ namespace KinectV2MouseControl
         Off,
 
         /// <summary>
-        /// Only the wake grammar is live. Ordinary speech can at most produce a scored "Kinect"
+        /// Only the wake grammar is live. Ordinary speech can at most produce a scored wake-word
         /// hypothesis, which is judged and almost always dropped.
         /// </summary>
         WakeOnly,
@@ -65,7 +65,7 @@ namespace KinectV2MouseControl
     /// <summary>
     /// One wake activation. Authorizes at most one command: the engine consumes it when it
     /// accepts a phrase, and the view model marks it executed before acting, so neither a
-    /// duplicate event nor a late callback can run a second action off the same "Kinect".
+    /// duplicate event nor a late callback can run a second action off the same wake.
     /// </summary>
     public sealed class VoiceSession
     {

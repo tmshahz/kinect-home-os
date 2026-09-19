@@ -228,18 +228,8 @@
                         </Button>
                     </StackPanel>
 
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top" Margin="6,0,0,0"
-                                shell:WindowChrome.IsHitTestVisibleInChrome="True">
-                        <Button Style="{StaticResource Button.Caption}" Click="Minimize_Click" ToolTip="Minimize">
-                            <local:IconView Icon="{StaticResource IconMinimize}" Size="14"/>
-                        </Button>
-                        <Button Style="{StaticResource Button.Caption}" Click="Maximize_Click" ToolTip="Maximize / restore">
-                            <local:IconView x:Name="MaximizeGlyph" Icon="{StaticResource IconMaximize}" Size="13"/>
-                        </Button>
-                        <Button Style="{StaticResource Button.CaptionClose}" Click="Close_Click" ToolTip="Quit KINECT-OS">
-                            <local:IconView Icon="{StaticResource IconClose}" Size="14"/>
-                        </Button>
-                    </StackPanel>
+                    <!-- Room for the caption buttons, which sit in the window's top-right corner (below). -->
+                    <Border Grid.Column="2" Width="144"/>
                 </Grid>
 
                 <!-- Page host. Pages are created once and swapped; each fades in on arrival. -->
@@ -253,19 +243,28 @@
                 <Grid Width="340">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="52"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <Grid Grid.Row="0" Margin="20,0,12,0" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <!-- Row 0 is caption band: the window's caption buttons sit over its right end. -->
+                    <Grid Grid.Row="1" Margin="20,0,12,4" shell:WindowChrome.IsHitTestVisibleInChrome="True">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <local:IconView Icon="{StaticResource IconHelp}" Size="16" Margin="0,0,8,0" Foreground="{StaticResource Brush.Accent}"/>
                             <TextBlock Text="What does this do?" FontSize="13.5" FontWeight="SemiBold"/>
                         </StackPanel>
-                        <Button Style="{StaticResource Button.Icon}" HorizontalAlignment="Right" Width="30" Height="30"
-                                Command="{Binding CloseHelpCommand}" ToolTip="Close">
-                            <local:IconView Icon="{StaticResource IconClose}" Size="13"/>
+                        <Button Style="{StaticResource Button.Subtle}" HorizontalAlignment="Right" Padding="10,5"
+                                Command="{Binding CloseHelpCommand}" ToolTip="Close the help drawer">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Hide" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <local:IconView Icon="{StaticResource IconChevronDown}" Size="12" RenderTransformOrigin="0.5,0.5">
+                                    <local:IconView.RenderTransform>
+                                        <RotateTransform Angle="-90"/>
+                                    </local:IconView.RenderTransform>
+                                </local:IconView>
+                            </StackPanel>
                         </Button>
                     </Grid>
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="20,4,12,20">
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="20,4,12,20">
                         <StackPanel Margin="0,0,8,0">
                             <TextBlock Text="{Binding HelpTitle}" Style="{StaticResource Text.CardTitle}" FontSize="16"/>
                             <TextBlock Text="{Binding HelpWhat}" Style="{StaticResource Text.BodyDim}" Margin="0,8,0,0" LineHeight="19"/>
@@ -288,6 +287,23 @@
                     </ScrollViewer>
                 </Grid>
             </Border>
+
+            <!-- ============================ Caption buttons ============================ -->
+            <!-- Always in the window's top-right corner, over the help drawer when it is open.
+                 Windows' own caption buttons are switched off (WindowBackdrop.HideSystemCaptionButtons),
+                 so these are the only ones. -->
+            <StackPanel Grid.Column="0" Grid.ColumnSpan="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Margin="0,0,10,0" Panel.ZIndex="10" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button Style="{StaticResource Button.Caption}" Click="Minimize_Click" ToolTip="Minimize">
+                    <local:IconView Icon="{StaticResource IconMinimize}" Size="14"/>
+                </Button>
+                <Button Style="{StaticResource Button.Caption}" Click="Maximize_Click" ToolTip="Maximize / restore">
+                    <local:IconView x:Name="MaximizeGlyph" Icon="{StaticResource IconMaximize}" Size="13"/>
+                </Button>
+                <Button Style="{StaticResource Button.CaptionClose}" Click="Close_Click" ToolTip="Quit KINECT-OS">
+                    <local:IconView Icon="{StaticResource IconClose}" Size="14"/>
+                </Button>
+            </StackPanel>
         </Grid>
     </Grid>
 </Window>

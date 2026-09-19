@@ -156,6 +156,64 @@ namespace KinectV2MouseControl
         }
     }
 
+    public class MicrophoneStatusToValueConverter : IValueConverter
+    {
+        public object Off { get; set; }
+        public object Ready { get; set; }
+        public object Reinitializing { get; set; }
+        public object Unavailable { get; set; }
+
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (!(value is MicrophoneStatus))
+            {
+                return Off;
+            }
+
+            switch ((MicrophoneStatus)value)
+            {
+                case MicrophoneStatus.Ready: return Ready;
+                case MicrophoneStatus.Reinitializing: return Reinitializing;
+                case MicrophoneStatus.Unavailable: return Unavailable;
+                default: return Off;
+            }
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return Binding.DoNothing;
+        }
+    }
+
+    /// <summary>
+    /// Microphone level zone (0 too quiet, 1 good, 2 very loud) to a value.
+    /// </summary>
+    public class MicZoneToValueConverter : IValueConverter
+    {
+        public object Quiet { get; set; }
+        public object Good { get; set; }
+        public object Loud { get; set; }
+
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is int)
+            {
+                switch ((int)value)
+                {
+                    case 1: return Good;
+                    case 2: return Loud;
+                }
+            }
+
+            return Quiet;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return Binding.DoNothing;
+        }
+    }
+
     public class ActivityKindToBrushConverter : IValueConverter
     {
         public Brush Action { get; set; }

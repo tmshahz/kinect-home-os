@@ -115,6 +115,7 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="Views\Controls\IconView.cs" />
+    <Compile Include="Views\Controls\KeyChordBox.cs" />
     <!-- Pages -->
     <Page Include="Views\Pages\HomePage.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -189,6 +190,7 @@
     <Compile Include="Views\WindowBackdrop.cs" />
     <!-- View models -->
     <Compile Include="ViewModels\ActionsViewModel.cs" />
+    <Compile Include="ViewModels\CustomCommandRowViewModel.cs" />
     <Compile Include="ViewModels\DisplaysViewModel.cs" />
     <Compile Include="ViewModels\KinectCursorViewModel.cs" />
     <Compile Include="ViewModels\LiveStatus.cs" />
@@ -215,6 +217,9 @@
     <Compile Include="Models\CursorControlOutput\Win32Input.cs" />
     <Compile Include="Models\CursorControlOutput\KeyboardControl.cs" />
     <Compile Include="Models\CursorControlOutput\SystemVolume.cs" />
+    <Compile Include="Models\CursorControlOutput\CaptureVolume.cs" />
+    <Compile Include="Models\CursorControlOutput\KeyChord.cs" />
+    <Compile Include="Models\CursorControlOutput\ForegroundApp.cs" />
     <Compile Include="Models\Actions\ControlAction.cs" />
     <Compile Include="Models\Actions\ActionRouter.cs" />
     <Compile Include="Models\Actions\ActionCatalog.cs" />
@@ -239,6 +244,9 @@
     <Compile Include="Models\Voice\VoiceFeedbackSounds.cs" />
     <Compile Include="Models\Voice\VoiceSelfTest.cs" />
     <Compile Include="Models\Voice\AudioInputDevices.cs" />
+    <Compile Include="Models\Voice\MicrophoneCaptureStream.cs" />
+    <Compile Include="Models\Voice\VoiceWakeWord.cs" />
+    <Compile Include="Models\Voice\CustomVoiceCommands.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>

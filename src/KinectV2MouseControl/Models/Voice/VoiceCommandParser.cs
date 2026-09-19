@@ -21,7 +21,12 @@ namespace KinectV2MouseControl
         /// <summary>
         /// "Cancel" / "never mind": close the command window without doing anything.
         /// </summary>
-        Cancel
+        Cancel,
+
+        /// <summary>
+        /// A user-defined command. CommandId is its id; the view model looks up what it does.
+        /// </summary>
+        Custom
     }
 
     /// <summary>
@@ -66,6 +71,16 @@ namespace KinectV2MouseControl
             intent.Kind = VoiceIntentKind.Shell;
             intent.ShellCommand = shellCommand;
             intent.CommandId = commandId;
+            intent.Canonical = canonical;
+            intent.Feedback = feedback;
+            return intent;
+        }
+
+        public static VoiceIntent ForCustom(string customId, string canonical, string feedback)
+        {
+            VoiceIntent intent = new VoiceIntent();
+            intent.Kind = VoiceIntentKind.Custom;
+            intent.CommandId = customId;
             intent.Canonical = canonical;
             intent.Feedback = feedback;
             return intent;
@@ -362,7 +377,39 @@ namespace KinectV2MouseControl
             return builder.ToString().Trim();
         }
 
+        /// <summary>
+        /// Built-in phrases and the volume pattern only.
+        /// </summary>
         public static bool TryParse(string text, out VoiceIntent intent, out string reason)
+        {
+            return TryParse(text, null, out intent, out reason);
+        }
+
+        /// <summary>
+        /// True when <paramref name="phrase"/> already means something built in: a catalog
+        /// phrase (or alias), "cancel", or a volume form. A wake word or custom phrase may not
+        /// be one of these.
+        /// </summary>
+        public static bool IsBuiltInCommand(string phrase)
+        {
+            VoiceIntent intent;
+            string reason;
+            if (TryParse(phrase, null, out intent, out reason))
+            {
+                return true;
+            }
+
+            // Also refuse forms the grammar would read as a volume ("volume max" is not a
+            // volume, but a custom command must not shadow the volume pattern either).
+            string normalized = Normalize(phrase);
+            return PhraseIndex.ContainsKey(normalized) || VolumePattern.IsMatch(normalized);
+        }
+
+        /// <summary>
+        /// Order: exact built-in phrases, then the user's custom phrases (exact, by match key),
+        /// then the volume pattern. No substring or fuzzy matching at any step.
+        /// </summary>
+        public static bool TryParse(string text, CustomPhraseSet custom, out VoiceIntent intent, out string reason)
         {
             intent = null;
             reason = null;
@@ -385,6 +432,13 @@ namespace KinectV2MouseControl
                     return false;
                 }
 
+                return true;
+            }
+
+            CustomPhraseSet.Entry entry;
+            if (custom != null && custom.TryMatch(text, out entry))
+            {
+                intent = VoiceIntent.ForCustom(entry.Id, entry.Key, entry.Phrase);
                 return true;
             }
 

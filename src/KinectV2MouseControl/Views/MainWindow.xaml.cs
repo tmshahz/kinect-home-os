@@ -85,6 +85,14 @@ namespace KinectV2MouseControl
         /// </summary>
         public bool EnablePageTransitions { get; set; }
 
+        /// <summary>
+        /// Set by the UI smoke test. The window is never shown or loaded there, so the engine
+        /// still holds its constructor defaults and the previews have faked live state; when the
+        /// application shuts down it closes this window, and the normal quit path would save all
+        /// of that over the user's settings. With this set, closing saves nothing.
+        /// </summary>
+        public bool IsOffscreenCheck { get; set; }
+
         private void Shell_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == "CurrentSection")
@@ -129,6 +137,9 @@ namespace KinectV2MouseControl
 
         private void Window_SourceInitialized(object sender, EventArgs e)
         {
+            // Only the app's own caption buttons (top right) should show and take clicks.
+            WindowBackdrop.HideSystemCaptionButtons(this);
+
             if (WindowBackdrop.TryApply(this))
             {
                 // Acrylic is live behind the window: paint a translucent tint instead of the
@@ -181,6 +192,9 @@ namespace KinectV2MouseControl
             Root.Margin = WindowState == WindowState.Maximized ? new Thickness(7) : new Thickness(0);
             MaximizeGlyph.Icon = (Geometry)FindResource(WindowState == WindowState.Maximized ? "IconRestore" : "IconMaximize");
 
+            // WPF can re-apply the window style on some state changes; keep the system buttons off.
+            WindowBackdrop.HideSystemCaptionButtons(this);
+
             if (WindowState == WindowState.Minimized && shell.CompactOnMinimize && !suppressMinimizeHook && !isQuitting)
             {
                 // Minimizing means "get out of my way", which in KINECT-OS is compact mode.
@@ -207,6 +221,11 @@ namespace KinectV2MouseControl
             {
                 tray.Dispose();
                 tray = null;
+            }
+
+            if (IsOffscreenCheck)
+            {
+                return;
             }
 
             shell.Quit();

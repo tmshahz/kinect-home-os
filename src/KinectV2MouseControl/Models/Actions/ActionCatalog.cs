@@ -74,7 +74,7 @@ namespace KinectV2MouseControl
 
                 if (!string.IsNullOrEmpty(VoiceTrigger))
                 {
-                    parts.Add("Voice: “Kinect” ✦ “" + VoiceTrigger + "”");
+                    parts.Add("Voice: wake word ✦ “" + VoiceTrigger + "”");
                 }
 
                 if (parts.Count == 0)
@@ -155,8 +155,10 @@ namespace KinectV2MouseControl
             Shell("compact", "Compact mode", "Hides the window and shows the floating status widget.", ActionCategory.System, "compact", "compact mode"),
 
             // ---- Apps --------------------------------------------------------------------
-            Planned("launch", "Launch app", "Start a program, file or URL. The router already supports it (LaunchApp with a target); custom commands to name targets are planned.",
-                ActionCategory.Apps, "open …"),
+            Custom("launch", "Launch app", "Starts a program, shortcut, file or URL. Give it a phrase as a custom voice command (Voice page).",
+                ControlAction.Launch(null)),
+            Custom("keys", "Key combination", "Presses a key combination in the window in front, e.g. an app's dictation shortcut. Give it a phrase as a custom voice command (Voice page).",
+                ControlAction.Keys(null)),
 
             // ---- Intelligence ------------------------------------------------------------
             Planned("intent", "Natural-language intent", "An assistant turns a spoken request into one or more actions from this catalog.",
@@ -189,7 +191,7 @@ namespace KinectV2MouseControl
                 case ActionCategory.WindowManagement: return "Acts on whichever window is in the foreground.";
                 case ActionCategory.Media: return "Media keys for the active player; exact volume and mute through Windows Core Audio.";
                 case ActionCategory.System: return "Actions on KINECT-OS itself.";
-                case ActionCategory.Apps: return "Starting things.";
+                case ActionCategory.Apps: return "Starting things and pressing app shortcuts, through custom voice commands.";
                 case ActionCategory.Intelligence: return "Reserved for the assistant layer.";
                 default: return "";
             }
@@ -263,6 +265,24 @@ namespace KinectV2MouseControl
             d.IsImplemented = true;
             d.CanRunFromUi = true;
             d.VoiceTrigger = voice;
+            return d;
+        }
+
+        /// <summary>
+        /// Implemented, but needs a target only a custom voice command supplies, so it has no
+        /// Run button and no built-in phrase.
+        /// </summary>
+        private static ActionDescriptor Custom(string id, string name, string description, ControlAction action)
+        {
+            ActionDescriptor d = new ActionDescriptor();
+            d.Id = id;
+            d.Name = name;
+            d.Description = description;
+            d.Category = ActionCategory.Apps;
+            d.Action = action;
+            d.IsImplemented = true;
+            d.CanRunFromUi = false;
+            d.VoiceTrigger = "your phrase";
             return d;
         }
 

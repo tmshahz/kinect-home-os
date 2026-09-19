@@ -385,13 +385,13 @@ namespace KinectV2MouseControl.Properties {
 
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.8")]
-        public double VoiceWakeThreshold {
+        [global::System.Configuration.DefaultSettingValueAttribute("65")]
+        public double VoiceWakeSensitivity {
             get {
-                return ((double)(this["VoiceWakeThreshold"]));
+                return ((double)(this["VoiceWakeSensitivity"]));
             }
             set {
-                this["VoiceWakeThreshold"] = value;
+                this["VoiceWakeSensitivity"] = value;
             }
         }
         
@@ -416,6 +416,42 @@ namespace KinectV2MouseControl.Properties {
             }
             set {
                 this["VoiceDismissSound"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string VoiceInputDeviceId {
+            get {
+                return ((string)(this["VoiceInputDeviceId"]));
+            }
+            set {
+                this["VoiceInputDeviceId"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string VoiceInputDeviceName {
+            get {
+                return ((string)(this["VoiceInputDeviceName"]));
+            }
+            set {
+                this["VoiceInputDeviceName"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Jarvis")]
+        public string VoiceWakePhrase {
+            get {
+                return ((string)(this["VoiceWakePhrase"]));
+            }
+            set {
+                this["VoiceWakePhrase"] = value;
             }
         }
     }

@@ -23,9 +23,13 @@ namespace KinectV2MouseControl
         public const uint MOUSEEVENTF_RIGHTUP = 0x0010;
         public const uint MOUSEEVENTF_WHEEL = 0x0800;
 
+        public const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
         public const uint KEYEVENTF_KEYUP = 0x0002;
 
+        private const uint MAPVK_VK_TO_VSC = 0;
+
         public const ushort VK_SHIFT = 0x10;
+        public const ushort VK_CONTROL = 0x11;
         public const ushort VK_MENU = 0x12;
         public const ushort VK_TAB = 0x09;
         public const ushort VK_LWIN = 0x5B;
@@ -97,6 +101,9 @@ namespace KinectV2MouseControl
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
+        [DllImport("user32.dll")]
+        private static extern uint MapVirtualKey(uint uCode, uint uMapType);
+
         public static INPUT CreateMouseInput(uint flags, int mouseData = 0)
         {
             INPUT input = new INPUT();
@@ -113,6 +120,52 @@ namespace KinectV2MouseControl
             input.Data.Keyboard.wVk = virtualKey;
             input.Data.Keyboard.dwFlags = isKeyUp ? KEYEVENTF_KEYUP : 0;
             return input;
+        }
+
+        /// <summary>
+        /// A key event that also carries the hardware scan code (and the extended-key flag where
+        /// the key has one). Browser-based apps (Electron: ChatGPT, Claude, Cursor) read the scan
+        /// code for KeyboardEvent.code, so a shortcut sent with the virtual key alone can be
+        /// ignored by them.
+        /// </summary>
+        public static INPUT CreateKeyInputWithScanCode(ushort virtualKey, bool isKeyUp)
+        {
+            INPUT input = CreateKeyInput(virtualKey, isKeyUp);
+            input.Data.Keyboard.wScan = (ushort)MapVirtualKey(virtualKey, MAPVK_VK_TO_VSC);
+            if (IsExtendedKey(virtualKey))
+            {
+                input.Data.Keyboard.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+            }
+
+            return input;
+        }
+
+        private static bool IsExtendedKey(ushort virtualKey)
+        {
+            switch (virtualKey)
+            {
+                case 0x21: // Page Up
+                case 0x22: // Page Down
+                case 0x23: // End
+                case 0x24: // Home
+                case 0x25: // Left
+                case 0x26: // Up
+                case 0x27: // Right
+                case 0x28: // Down
+                case 0x2C: // Print Screen
+                case 0x2D: // Insert
+                case 0x2E: // Delete
+                case 0x5B: // Left Windows
+                case 0x5C: // Right Windows
+                case 0x5D: // Applications
+                case 0x6F: // Numpad divide
+                case 0x90: // Num Lock
+                case 0xA3: // Right Ctrl
+                case 0xA5: // Right Alt
+                    return true;
+                default:
+                    return virtualKey >= 0xA6 && virtualKey <= 0xB7; // browser and media keys
+            }
         }
 
         /// <summary>

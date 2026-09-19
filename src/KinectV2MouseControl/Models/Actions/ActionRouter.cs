@@ -208,6 +208,13 @@ namespace KinectV2MouseControl
                     }
                     break;
 
+                case ControlActionType.SendKeys:
+                    if (!SendKeys(action.Parameter))
+                    {
+                        return false;
+                    }
+                    break;
+
                 case ControlActionType.None:
                     return false;
 
@@ -302,6 +309,24 @@ namespace KinectV2MouseControl
                 RuntimeLog.Write("LaunchApp failed for '" + target + "': " + ex.Message);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Presses a key combination in the foreground window. A combination that does not
+        /// parse is refused rather than approximated.
+        /// </summary>
+        private static bool SendKeys(string chordText)
+        {
+            KeyChord chord;
+            string error;
+            if (!KeyChord.TryParse(chordText, out chord, out error))
+            {
+                RuntimeLog.Write("SendKeys refused for '" + chordText + "': " + error);
+                return false;
+            }
+
+            KeyboardControl.SendChord(chord);
+            return true;
         }
 
         /// <summary>

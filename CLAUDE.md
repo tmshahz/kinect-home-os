@@ -15,7 +15,8 @@ release v1.2.1 in 2018). It has been heavily reworked and is growing into **Kine
 a Windows spatial gesture-control system built on an Xbox One Kinect (Kinect v2). The control
 engine went through a stabilization phase; on top of it now sits **KINECT-OS**, the control
 center UI (shell window, floating widget, tray icon, help drawer, activity feed, wake-gated
-local voice commands, action catalog, AI placeholder). The UI is COMPILE VERIFIED +
+local voice commands with a user-chosen wake word ("Jarvis" by default) and user-defined custom
+commands, action catalog, AI placeholder). The UI is COMPILE VERIFIED +
 offscreen-rendered only (§8); the voice pipeline is COMPILE VERIFIED + passes an offline
 synthetic-speech acceptance test (§4.16); the engine's hardware status is unchanged (§5, §7).
 
@@ -34,15 +35,16 @@ Windows control              MouseControl / KeyboardControl (SendInput), CursorO
 ```
 
 Inputs other than gestures plug in at the `ActionRouter`/`ControlAction` boundary: the
-wake-gated voice engine already does (`WakeGatedVoiceEngine` authorizes one command per
-"Kinect" → `VoiceViewModel` → `ActionRouter.Execute(action, "voice")`), the Actions page does
+wake-gated voice engine already does (`WakeGatedVoiceEngine` authorizes one command per wake
+→ `VoiceViewModel` → `ActionRouter.Execute(action, "voice")`), the Actions page does
 ("control center"), and the AI section is a placeholder for the same path (a future assistant
 would sit after the deterministic voice parser's refusal, inside the same wake session).
-`ControlAction.Parameter` carries the `LaunchApp` target.
+`ControlAction.Parameter` carries the `LaunchApp` target and the `SendKeys` combination.
 
-**Longer-term directions, not in code:** custom user-defined voice commands, the assistant
-layer itself (provider/model, workflows), HUD beyond the compact widget, more gestures,
-"move window to display".
+**Longer-term directions, not in code:** the assistant layer itself ("Build 2": DeepSeek tool
+calling for app/file/window/web actions, Whisper speech-to-text after the chime, a widget AI
+button with a slide-down chat panel, encrypted local API key), HUD beyond the compact widget,
+more gestures, "move window to display".
 
 Names still inherited from upstream: assembly/exe `KinectV2MouseControl`, namespace
 `KinectV2MouseControl`, AssemblyVersion `1.2.1.0`, the upstream credit line (now in
@@ -90,14 +92,17 @@ Git Bash (use `-p:` not `/p:`; MSYS rewrites `/p:` as a path):
 - **UI verification without launching: `KinectV2MouseControl.exe --ui-smoke-test`.** It
   loads the shell, every page and the widget, lays them out, renders PNGs and exits (0 = pass,
   2 = a view failed). It never shows a window, opens the sensor, starts voice, creates the tray
-  icon or writes `runtime.log`. Report: `%LOCALAPPDATA%\KinectHomeOS\ui-smoke-test.txt`;
+  icon, writes `runtime.log` or saves settings. (Until `MainWindow.IsOffscreenCheck` existed,
+  the never-shown window was closed at exit and the normal quit path saved the unloaded
+  engine's defaults, Mode 0 and the previews' fake voice state over that exe's `user.config`.) Report: `%LOCALAPPDATA%\KinectHomeOS\ui-smoke-test.txt`;
   renders: `%LOCALAPPDATA%\KinectHomeOS\ui-preview\*.png` (open them with the Read tool).
   Run it after every XAML change: a missing `StaticResource` or a bad template only fails at
   load time, which this catches and a build does not.
 - **Voice verification without a microphone: `KinectV2MouseControl.exe --voice-self-test`**
   (about 5 minutes, exit 0 = pass, 3 = fail). Checks the number reader and parser, loads both
-  grammars, reads the Core Audio volume and writes the same level back (no audible change),
-  checks the chime, then runs the real `WakeGatedVoiceEngine` against synthesized speech
+  grammars, reads the Core Audio volume and writes the same level (and mute state) back (no
+  audible change), lists the microphones read-only and checks a missing one is refused, checks
+  the chime, then runs the real `WakeGatedVoiceEngine` against synthesized speech
   (Microsoft David/Zira voices) fed at real-time pace through a simulated microphone, with
   the chime mixed back in as echo. Commands are recorded, never executed; no mic, no speakers,
   no `runtime.log`. Report: `%LOCALAPPDATA%\KinectHomeOS\voice-self-test.txt`. Run it after
@@ -115,8 +120,10 @@ Git Bash (use `-p:` not `/p:`; MSYS rewrites `/p:` as a path):
 
 | File | Location | Notes |
 |---|---|---|
-| Last-used settings | `%LOCALAPPDATA%\KinectV2MouseControl\KinectV2MouseControl.exe_Url_<hash>\1.2.1.0\user.config` | .NET user settings, **per exe path** (Debug and Release differ). Saved only on normal close. Tuning + mode + the UI settings (`CompactOnMinimize`, `StartCompact`, `OverlayAlwaysOnTop`, `OverlayLeft/Top`, `VoiceEnabled`, `VoiceWakeThreshold`, `VoiceCommandThreshold`, `VoiceDismissSound`) |
+| Last-used settings | `%LOCALAPPDATA%\KinectV2MouseControl\KinectV2MouseControl.exe_Url_<hash>\1.2.1.0\user.config` | .NET user settings, **per exe path** (Debug and Release differ). Saved only on normal close. Tuning + mode + the UI settings (`CompactOnMinimize`, `StartCompact`, `OverlayAlwaysOnTop`, `OverlayLeft/Top`, `VoiceEnabled`, `VoiceWakeSensitivity` (0-100), `VoiceCommandThreshold`, `VoiceDismissSound`, `VoiceInputDeviceId` + `VoiceInputDeviceName` = chosen microphone, empty = System Default, wake word `VoiceWakePhrase` (default "Jarvis"; a stale `VoiceWakeWord` = "Kinect" entry from an earlier build is ignored on purpose)) |
 | Profiles | `%LOCALAPPDATA%\KinectHomeOS\profiles.json` | 3 slots, shared by all builds. Atomic write. Unreadable file is moved to `profiles.json.bad`. A slot rename is saved immediately |
+| Local Whisper (Build 2) | `%LOCALAPPDATA%\KinectHomeOS\whisper\` | Set up 2026-09-20, not yet used by the app: `bin\` = whisper.cpp v1.9.4 x64 CPU build, `models\ggml-base.en.bin`, `test\*.wav`, `README.md` with checksums, measured speeds (whisper-server + `audio_ctx=512` ≈ 0.3 s per command on this laptop) and the recommended integration. Outside the repo, shared by all builds |
+| Custom voice commands | `%LOCALAPPDATA%\KinectHomeOS\voice-commands.json` | Shared by all builds. Saved ~0.6 s after an edit and on quit, atomic write. Missing = the 3 starters (not written until edited). Unreadable → `voice-commands.json.bad` |
 | Runtime log | `%LOCALAPPDATA%\KinectHomeOS\runtime.log` (+ `runtime.prev.log`) | Human-rate event log, fresh each launch. **Ask the user for it when diagnosing intermittent issues** |
 | UI smoke test | `%LOCALAPPDATA%\KinectHomeOS\ui-smoke-test.txt`, `ui-preview\*.png` | Written by `--ui-smoke-test` only |
 | Voice self-test | `%LOCALAPPDATA%\KinectHomeOS\voice-self-test.txt` | Written by `--voice-self-test` only |
@@ -141,7 +148,8 @@ src/KinectV2MouseControl/
     ShellViewModel.cs         navigation, help drawer, compact state, activity feed, UI settings, commands; owns the rest
     KinectCursorViewModel.cs  engine settings + Load/Save/defaults/profiles/calibration + LiveStatus refresh (200 ms)
     LiveStatus.cs             bindable engine snapshot (ControlState Off/Standby/Ready/Active, hands, gestures, signal, calibration)
-    VoiceViewModel.cs         voice switch, thresholds, HUD state, decisions/diagnostics; the ONLY place a voice command is executed
+    VoiceViewModel.cs         voice switch, wake word, custom command list, microphone choice/fallback/retry, thresholds, HUD state, decisions/diagnostics; the ONLY place a voice command is executed
+    CustomCommandRowViewModel.cs  one editable custom command (phrase, kind, keys + "only in" app, target, action)
     ActionsViewModel.cs       catalog grouped by category with Run commands
     DisplaysViewModel.cs      monitor rects + live cursor dot; hand-space geometry (reach rect, thresholds, hand dots)
     ProfileSlotViewModel.cs   one slot: name (rename persists), state, summary, Load/Save
@@ -152,10 +160,11 @@ src/KinectV2MouseControl/
     Pages/*.xaml(.cs)         HomePage, GesturesPage, VoicePage, ActionsPage, DisplaysPage, ProfilesPage, SettingsPage, AiPage
     Controls/TuningSlider     labelled slider + value box + help glyph (HelpKey must match a ControlHelp title)
     Controls/IconView.cs      draws an Icons.xaml geometry in the inherited Foreground
+    Controls/KeyChordBox.cs   key-combination box: Ctrl/Alt/Win chords and F-keys are recorded, plain text can be typed (Win+H)
     ControlHelp.cs            single source of control explanations (tooltips, drawer, Settings guide)
     HelpHub.cs                static hover/pin routing from any control to the drawer
     Converters.cs             BoolToValue, Visibility, state/kind→brush, IconKey, Scale, Percent, Format...
-    WindowBackdrop.cs         DwmSetWindowAttribute: dark mode, rounded corners, acrylic (with opaque fallback)
+    WindowBackdrop.cs         DwmSetWindowAttribute: dark mode, rounded corners, acrylic (with opaque fallback); HideSystemCaptionButtons (drops WS_SYSMENU)
     TrayIcon.cs               NotifyIcon with a generated icon; Open / Compact / Control toggle / Quit
     RadioCheckedToBoolConverter.cs  mode chips; ConvertBack returns Binding.DoNothing when unchecked
   Models/
@@ -174,23 +183,29 @@ src/KinectV2MouseControl/
     CursorControlOutput/
       CursorOutputLoop.cs     background ~125 Hz thread, sole SetCursorPos caller
       MouseControl.cs         SendInput buttons/wheel, SetCursorPos wrapper, injected-down tracking
-      KeyboardControl.cs      Alt+Tab, Win+arrow chords, media keys (Tap with repeat)
-      SystemVolume.cs         Core Audio IAudioEndpointVolume: exact master volume, explicit mute/unmute
+      KeyboardControl.cs      Alt+Tab, Win+arrow chords, media keys (Tap with repeat), SendChord (custom combinations, with scan codes)
+      KeyChord.cs             "Ctrl+Shift+D" parse (lenient) / canonical text / virtual keys
+      ForegroundApp.cs        process name of the foreground window; running windowed apps
+      SystemVolume.cs         Core Audio IAudioEndpointVolume (render): exact master volume, explicit mute/unmute
+      CaptureVolume.cs        Core Audio IAudioEndpointVolume (capture): a mic's Windows input level (the Voice page gain slider)
       Win32Input.cs           SendInput structs/constants
       VirtualScreen.cs        VirtualScreen (bounds, monitor rects) + DesktopLayout (nearest-monitor clamp)
     Actions/
-      ControlAction.cs        enum (mouse, scroll, windows, media, control gate, LaunchApp), Describe(), IActionSink, IControlGate
+      ControlAction.cs        enum (mouse, scroll, windows, media, control gate, LaunchApp, SendKeys), Describe(), IActionSink, IControlGate
       ActionRouter.cs         Execute(action, source); LastSource; key chords via KeyboardControl; LaunchApp
       ActionCatalog.cs        ActionDescriptor list for the Actions page + voice grammar (implemented vs planned)
     Voice/
       WakeGatedVoiceEngine.cs the state machine: WakeOnly → Acknowledging → Listening; acceptance rules, gate, timeout
       VoiceSession.cs         VoicePhase/Outcome/Verdict, VoiceSession (single-use), VoiceDecision, counters, event args
-      VoiceGrammars.cs        SRGS wake grammar ("Kinect" /kɪˈnɛkt/) and command grammar (phrases + volume 0-999)
-      VoiceCommandParser.cs   deterministic parser (exact phrases + volume pattern), SpokenNumber, VoiceIntent
+      VoiceGrammars.cs        SRGS wake grammar (the user's wake word; "Kinect" gets /kɪˈnɛkt/) and command grammar (phrases + custom phrases + volume 0-999)
+      VoiceCommandParser.cs   deterministic parser (exact phrases → custom phrases → volume pattern), SpokenNumber, VoiceIntent
       VoiceCommand.cs         VoiceCommand + built-in VoiceCommandCatalog (phrases → catalog action; volume pattern; cancel)
+      VoiceWakeWord.cs        VoicePhrases (grammar tokens, acronym spelling, match keys) + VoiceWakeWord (default "Jarvis", rules)
+      CustomVoiceCommands.cs  CustomCommandDefinition/Store (voice-commands.json), CustomCommandRules, CustomPhraseSet
       VoiceFeedbackSounds.cs  synthesized wake chime + dismiss tone (IVoiceFeedback)
       VoiceSelfTest.cs        --voice-self-test harness (simulated microphone + chime loopback)
-      AudioInputDevices.cs    waveIn device names for the mic card
+      AudioInputDevices.cs    Core Audio capture-device list (IDs, names, default) + AudioDeviceWatcher (IMMNotificationClient)
+      MicrophoneCaptureStream.cs  WASAPI capture of one chosen device → 16 kHz mono stream for the recognizer
     Diagnostics/
       RuntimeLog.cs           event log on disk (Suspend() for the smoke test)
       ActivityLog.cs          in-memory recent-activity feed (coalescing), any thread
@@ -223,6 +238,9 @@ src/KinectV2MouseControl/
 | Command-window deadline | `System.Threading.Timer` | 4 s (+2.5 s once if a command is mid-utterance) |
 | Voice grammar switch | thread pool, outside the state lock, converges to the current phase | per phase change |
 | Voice HUD countdown / mic level / diagnostics | `DispatcherTimer` in `VoiceViewModel` while voice is on | 50 ms |
+| Selected-microphone capture | background MTA thread `KINECT-OS microphone` (owns every WASAPI COM object), AboveNormal; the recognizer reads from its queue | 10 ms poll |
+| Audio device notifications | Windows audio thread → `Dispatcher.BeginInvoke` → 500 ms debounce `DispatcherTimer` → `RefreshMicrophones` | on change |
+| Voice input retry | `DispatcherTimer` in `VoiceViewModel` after the input is lost | 0.3-1.5 s, then backing off to 10 s |
 | `ActivityLog.EntryAdded` | posting thread (UI in practice); `ShellViewModel` marshals into the ObservableCollection | on event |
 | Tray icon menu / double-click | WinForms message loop on the UI thread | on click |
 
@@ -472,7 +490,12 @@ A `HandStateFilter` configured from `GestureTuning`:
   a `SingleBorderWindow`; `WindowBackdrop.TryApply` in `SourceInitialized` asks DWM for dark
   mode, rounded corners and acrylic; on success `Backdrop.Background` switches from the opaque
   gradient to the translucent tint. Root margin 7 when maximized. Header controls carry
-  `WindowChrome.IsHitTestVisibleInChrome`.
+  `WindowChrome.IsHitTestVisibleInChrome`. With the frame extended over the whole window DWM
+  drew its own min/max/close on top of the app's (and those took the clicks), so
+  `WindowBackdrop.HideSystemCaptionButtons` removes WS_SYSMENU (in `SourceInitialized` and on
+  every state change; min/max box styles stay for the taskbar and Win+Arrow). The app's
+  caption buttons are one top-level strip in the window's top-right corner, above the help
+  drawer (whose header sits below the caption band); the header keeps a 144 px spacer for it.
 - **Live status:** `KinectCursorViewModel.UpdateStatus()` (timer + engine events) fills
   `LiveStatus`; `ControlState` = Off (mode Disabled) / Standby (control off) / Ready /
   Active (pointer session). `Headline`/`Subline` are the one-line summaries used by the rail
@@ -495,10 +518,12 @@ A `HandStateFilter` configured from `GestureTuning`:
 
 ### 4.16 Voice: wake-gated, local, off by default
 
-**Interaction:** say "Kinect" on its own → ✦ chime → one command within 4 s → done, back to
-waiting for "Kinect". One wake authorizes exactly one command. The combined one-breath form
-("Kinect volume fifty") is deliberately **not** supported: a grammar containing wake word +
-command is exactly what caused the original false actions.
+**Interaction:** say the wake word on its own → ✦ chime → one command within 4 s → done, back
+to waiting for the wake word. The wake word is the user's (Voice page, 1-3 words, default
+**"Jarvis"**; it was fixed as "Kinect" until 2026-09-19 - the history below is about that
+word). One wake authorizes exactly one command. The combined one-breath form ("Jarvis volume
+fifty") is deliberately **not** supported: a grammar containing wake word + command is
+exactly what caused the original false actions.
 
 **Root cause of the original false commands (measured, see §6.7):** the first version loaded
 one closed grammar, "Kinect" + command phrase, and executed whatever it reported. A closed
@@ -517,8 +542,9 @@ Off ─Start→ WakeOnly ─"Kinect" accepted→ Acknowledging ─chime played +
                └── Executed / NotRecognized / TimedOut / Cancelled / SpokeTooEarly ┘
 ```
 
-- **Grammars:** wake (SRGS, one token "Kinect", IPA /kɪˈnɛkt/; the schwa form = "connect" is
-  deliberately absent) and commands (SRGS named rules: every catalog phrase + "volume N
+- **Grammars:** wake (SRGS, the wake word's tokens from `VoicePhrases.GrammarTokens`; "Kinect"
+  gets IPA /kɪˈnɛkt/ - the schwa form = "connect" is deliberately absent) and commands (SRGS
+  named rules: every catalog phrase + every valid, enabled custom phrase + "volume N
   [percent]" / "set volume [to] N [percent]" with N = 0-999 in words, so 200 is heard as 200
   and refused, never bent to 100). **Never both enabled:** WakeOnly = wake only;
   Acknowledging/Listening = commands only (the old one is disabled before the new one is
@@ -526,10 +552,16 @@ Off ─Start→ WakeOnly ─"Kinect" accepted→ Acknowledging ─chime played +
   SRGS. No dictation grammar: it was measured to swallow the real wake word and commands.
   Recognizer adaptation is switched off for this engine.
 - **Wake acceptance (all required):** wake-grammar result; confidence ≥ `WakeThreshold`
-  (default **0.80** = the engine's own HighConfidenceThreshold band); **lead** (words start −
-  utterance speech onset from `SpeechDetected`) ≤ 0.20 s; **≥ 0.30 s of silence before** the
-  utterance (onset − end of the previous phrase); word duration 0.20-1.10 s. Near misses
-  (confidence ≥ 0.45) are logged as decisions; everything else is only counted.
+  (default **0.65**, set by Wake Sensitivity, see below); **lead** (words start − utterance
+  speech onset from `SpeechDetected`) ≤ 0.20 s; **≥ 0.30 s of silence before** the utterance
+  (onset − end of the previous phrase); word duration 0.20-1.10 s (+0.5 s per extra token of a
+  multi-word or spelled wake word, `VoiceWakeWord.MaxDuration`). Near misses (confidence ≥
+  0.45) are logged as decisions; everything else is only counted. **The lead/gap/duration
+  isolation checks - not the confidence floor - are what keep conversation out** (hardware log:
+  ~60 conversational "Kinect" candidates in 20 min, almost all rejected by lead or gap; genuine
+  and false wakes both scored 0.86-0.95). So the floor is set below the recognizer's
+  HighConfidence band (0.80) to make a normal-voice "Kinect" reliable, especially on narrowband
+  Bluetooth mics, without weakening safety.
 - **Command acceptance (all required):** phase Listening, current session; the utterance's
   speech onset ≥ the **gate** (audio position taken 80 ms after the chime finished playing),
   except that ≤ 0.30 s of merged chime echo before the gate is tolerated if the words
@@ -550,13 +582,15 @@ Off ─Start→ WakeOnly ─"Kinect" accepted→ Acknowledging ─chime played +
   ~395 ms, command window opens ~675 ms (includes a simulated 40 ms output latency). The
   command grammar is already live during the chime; only the acceptance gate waits.
 - **Parser (`VoiceCommandParser`):** normalize (lower case, hyphens → spaces, "%" →
-  "percent", punctuation dropped) then **exact** catalog-phrase lookup, then the volume
+  "percent", punctuation dropped) then **exact** catalog-phrase lookup, then the running
+  recognizer's custom phrases (`CustomPhraseSet`, exact by match key), then the volume
   pattern with `SpokenNumber` (0-999 words or digits, strict; > 100 refused). No substring or
   fuzzy matching anywhere. Future assistant fallback goes after a parser refusal.
 - **Execution:** only `VoiceViewModel.OnCommandRecognized` executes, only for
   `CommandRecognized`, only if voice is still on: action intents →
   `Engine.ExecuteAction(action, "voice")` (router returns false on failure → HUD shows it);
-  shell intents ("open", "compact", "calibrate") → `ShellCommandRequested`.
+  shell intents ("open", "compact", "calibrate") → `ShellCommandRequested`; custom intents →
+  `RunCustomCommand` (below).
 - **HUD:** `VoiceHudState` Wake / Listening / Executed / Rejected drives the Voice page hero
   (orb, title, 4 s countdown bar, mic level), the header pill and the compact widget ("KINECT
   ● Listening…", "Volume → 70%"); outcomes linger 2.6 s.
@@ -567,10 +601,109 @@ Off ─Start→ WakeOnly ─"Kinect" accepted→ Acknowledging ─chime played +
   lead and gap. Background speech is never transcribed: in WakeOnly the only possible text is
   "Kinect", in the window only catalog phrases. The Activity feed only gets executed commands
   and voice on/off.
-- **Thresholds are user-tunable** on the Voice page (Wake confidence, Command confidence) and
-  persisted; the Last wake readout shows every near miss's confidence for tuning on hardware.
+- **Wake Sensitivity** (Voice page, 0-100, persisted `VoiceWakeSensitivity`, default 65) is the
+  wake control. `VoiceViewModel` maps it to the confidence floor: `threshold =
+  clamp(0.90 − 0.40·(sensitivity/100), 0.60, 0.90)` (65 → ≈0.64). It moves ONLY the floor; the
+  isolation checks are untouched, so even at 100 an embedded/rushed "Kinect" still cannot wake.
+  Legacy 0-1 saved values are scaled ×100 on load. **Command confidence** (0.30-0.99, default
+  0.70) is a separate slider. The Last wake readout shows every near miss's confidence.
+- **Test wake word** (`VoiceViewModel.IsTestMode`, toggle button): the full pipeline runs so
+  wake confidence and the mic meter are real, but `OnCommandRecognized` shows the parsed command
+  and does NOT execute it - no action, no shell command. Leaving voice off leaves test mode. For
+  comparing mics and tuning sensitivity/level safely.
+- **Live level + input gain (Voice page → Microphone card):** the meter is `MicLevel` (0-1) with
+  a too-quiet/good/very-loud zone (`MicLevelZone` → `MicZoneToValueConverter`); the percentage is
+  `MicLevelPercentText`. **Input level** is the selected device's Windows capture level via
+  `CaptureVolume` (Core Audio `IAudioEndpointVolume` on the capture endpoint, scalar 0-1 = the
+  Sound-settings slider). Writability is confirmed by a no-op write, not the hardware-support
+  flags (the Kinect array reports no hardware volume yet software level sticks); a device that
+  refuses the write shows read-only. This is signal strength, separate from Wake Sensitivity.
 - Windows 11 + Kinect mic audio enhancements can make the sensor reconnect; the Voice page
   says so. Voice never moves the pointer.
+
+**Wake word and custom commands (2026-09-19, CV + self-test):**
+- **Wake word** (`VoiceViewModel.WakeWordDraft` → Apply / Enter): `VoiceWakeWord.TryValidate`
+  - letters only, 1-3 typed words, ≥ 3 letters, not a built-in command (incl. cancel/volume
+  forms). Applying revalidates the custom commands and restarts the recognizer
+  (`RequestReinitialize`). Persisted as `VoiceWakePhrase`; an invalid saved value falls back
+  to "Jarvis". All UI text quotes `Voice.WakeWordQuoted`.
+- **Custom commands** (`CustomCommandDefinition`, Voice page → Your commands, stored in
+  voice-commands.json): phrase + on/off + kind:
+  - **Keys** - a `KeyChord` ("Ctrl+Shift+D") sent by `ActionRouter` (`SendKeys` →
+    `KeyboardControl.SendChord`: one SendInput batch, modifiers down/key/modifiers up, with
+    scan codes because Electron apps read `KeyboardEvent.code`), optionally **only in** an app:
+    `ForegroundApp.Matches(foreground process name, OnlyInApp)` must hold at execution time or
+    nothing is pressed and the HUD says which app is in front. The dropdown offers running
+    windowed apps (process names: ChatGPT, claude, Cursor, msedge…).
+  - **OpenApp** - `LaunchApp` with a path / .lnk (Browse keeps the shortcut itself) / URL.
+  - **Action** - any `CustomCommandRules.AssignableActions()` catalog entry (not mouse holds,
+    not SetVolume, not SendKeys/LaunchApp); shell commands go to `ShellCommandRequested`.
+- **Rules** (`CustomCommandRules.CheckPhrase` + `VoiceViewModel.ValidateCustomCommands`):
+  letters only (numbers as words), ≤ 6 words, not a built-in phrase or volume form, must not
+  contain the wake word, no duplicate among enabled rows, and the kind's settings must be
+  complete. A failing row stays listed with its reason but is not in the grammar.
+- **Acronyms:** a token in capitals (≤ 4 letters) or without a vowel is spelled in the
+  grammar ("GPT" → "G P T"); `VoicePhrases.MatchKey` joins single letters back, so "G P T
+  listen" from the recognizer matches "GPT listen".
+- **Restart vs. no restart:** the engine freezes a `CustomPhraseSet` (id → phrase) at Start.
+  Edits are debounced 600 ms, saved, and a new set whose `Signature` differs from the running
+  one triggers `RequestReinitialize`. What a phrase *does* is looked up by id at execution, so
+  changing keys / app / target needs no restart. Test mode shows what would run (including
+  whether the "only in" app is in front) and presses nothing.
+- **Starters** (file absent): "GPT listen" (only in ChatGPT), "Claude listen" (claude),
+  "Cursor listen" (Cursor), keys blank - the user records each app's dictation shortcut.
+
+**Microphone selection (Voice page → Microphone card):**
+- System.Speech can only open "the default audio device" or a stream. **System Default** keeps
+  `SetInputToDefaultAudioDevice` (the path that was hardware-tested). A **specific device** is
+  opened by its Core Audio endpoint ID through WASAPI shared mode with AUTOCONVERTPCM
+  (Windows converts to 16 kHz/16-bit/mono) by `MicrophoneCaptureStream`, which the
+  recognizer reads via `SetInputToAudioStream`. Read blocks until the full request is there
+  (a short read = end of stream to SAPI). The legacy waveIn route was rejected: mapping an
+  endpoint ID to a waveIn index (DRV_QUERYFUNCTIONINSTANCEID) returned garbage on this machine.
+- Devices: `AudioInputDevices.List` (active capture endpoints, full names, stable IDs, default
+  = eCapture/eConsole). `AudioDeviceWatcher` (IMMNotificationClient) + the Refresh button
+  re-read the list (500 ms debounce).
+- Persistence: `VoiceInputDeviceId` (endpoint ID, the stable key) + `VoiceInputDeviceName`
+  (display while missing), UI settings, saved on close. Not part of tuning profiles
+  (machine-specific).
+- **Effective input** = the preferred device if connected and not "suspect", else System
+  Default. `VoiceViewModel.ApplyMicrophoneChoice` restarts the recognizer when the effective
+  input differs from the bound one (user choice, device lost, device back) or when System
+  Default is bound and Windows' default input moved. A missing saved device shows as
+  "not connected" in the dropdown with a notice; voice returns to it when it reconnects.
+- **Switching = `RequestReinitialize`**: status Reinitializing, generation bumped, HUD cleared,
+  then (dispatcher, Background) `Stop()` → generation bumped → `StartEngine`. Every engine event
+  is stamped with the generation when raised and dropped on the UI thread if stale - a command
+  recognized a moment before a switch is never executed. `Stop()` closes the capture stream
+  before disposing the recognizer (unblocks its Read, releases the device), so there is never
+  more than one microphone stream. A new recognizer always starts in WakeOnly, no session.
+- **Loss**: a vanished device (AUDCLNT_E_DEVICE_INVALIDATED, 2 s without audio, 8 s before the
+  first audio for Bluetooth profile switches) ends the stream → engine `Stopped` with the reason
+  → voice stays on, status Unavailable, retry (1.5 s, then backing off to 10 s) on the effective
+  input. A selected device that fails to open, or dies within 10 s of starting, becomes
+  "suspect" and is skipped until it is chosen again, Refresh is pressed or the device set
+  changes (stops a flapping Bluetooth link from restart-looping). The same retry also recovers
+  from "Audio input is not supported for non-active console sessions" (locked session).
+- Measured on this PC (scratch harness, real engine): start 60-350 ms, stop 20-85 ms, capture
+  clock 5-35 ms ahead of the recognizer's position (same timeline; `CurrentAudioPosition` uses
+  the later of the two for the chime gate, capped at 0.5 s).
+
+**False wakes, what the hardware log showed (2026-09-18 session):** false and real wakes
+both scored 0.93-0.95, so raising Wake confidence would not help; the lead/gap checks rejected
+~60 conversational "Kinect" candidates in 20 minutes. `SpeechDetected` fires per PHRASE (not
+per sound), and is delivered 0.7-1.8 s after the phrase starts, so "speech carried straight on
+after Kinect" cannot be detected before the chime without ~1 s of extra latency - not done.
+`GapBefore` is measured from the end of the previous *recognized* phrase, so speech the
+recognizer made no phrase of counts as silence (it can overstate the pause). Accepted/rejected
+wakes log the gap too, for data-driven tuning.
+
+**Wake made easier (2026-09-19 pass):** the follow-up complaint was the opposite - a deliberate
+"Kinect" at normal volume was too hard, especially on a close Bluetooth mic. Since the isolation
+checks (not the confidence floor) are what keep conversation out, the default floor dropped from
+0.80 to **0.65** (Wake Sensitivity 65), which makes genuine wakes reliable while the pure-
+conversation self-test corpus still passes with 0 wakes at 0.65. If a user needs it stricter or
+looser, Wake Sensitivity moves the floor 0.60-0.90; the isolation gate never moves.
 
 ### 4.17 Action catalog and the extended vocabulary
 
@@ -578,6 +711,8 @@ Off ─Start→ WakeOnly ─"Kinect" accepted→ Acknowledging ─chime played +
   Left/Right, Win+D, Win+Tab, Alt+F4), media keys, `LaunchApp` (shell-executes `Parameter`),
   **`SetVolume`** (Value = 0-100, Core Audio, unmutes above 0; out-of-range refused, never
   clamped) and explicit **`Mute` / `Unmute`** (Core Audio; the old toggle is gone).
+  `SystemVolume` treats any non-negative HRESULT as success: SetMute returns S_FALSE when the
+  state is unchanged (the first version reported every "volume N" as FAILED because of it).
   `VolumeUp/VolumeDown` send five media-key steps (10%, Windows overlay shows). Keys go
   through `KeyboardControl.Chord/Tap` (one SendInput batch). `IControlGate.SetControlEnabled
   (bool, source)` was added.
@@ -587,6 +722,8 @@ Off ─Start→ WakeOnly ─"Kinect" accepted→ Acknowledging ─chime played +
 - `ActionCatalog.All` is the human-readable index (Pointer, Windows, WindowManagement, Media,
   System, Apps, Intelligence) with `IsImplemented`, `CanRunFromUi` (mouse-button actions and
   Close window are not runnable from the page), trigger text and optional `ShellCommand`.
+  "launch" (`LaunchApp`) and "keys" (`SendKeys`, Parameter = "Ctrl+Shift+D") are implemented
+  but only reachable through custom voice commands (no Run button, no built-in phrase).
   **Adding an action = enum member + router case + catalog descriptor (+ voice phrase).**
 
 ## 5. Implemented functionality
@@ -630,12 +767,22 @@ guide, about) / AI (placeholder); floating widget; tray icon; activity feed; loc
 commands (System.Speech); new routed actions (window management, media, control on/off,
 LaunchApp). The old settings window, `ParameterControl` and `HelpWindow` are gone.
 
+**Wake word + custom commands + caption fix (CV, 2026-09-19):** editable wake word (default
+"Jarvis") with Apply and the existing Test mode; custom commands (key combination with
+"only in app" check, open app/file/URL, built-in action) with starters for ChatGPT / Claude /
+Cursor dictation; only one set of window caption buttons; the smoke test no longer saves
+settings. Covered by `--voice-self-test` (parser, rules, key parsing, synthetic "Jarvis" →
+"Claude listen" / "GPT listen"); nothing of it is hardware verified.
+
 **Voice (CV + offline acceptance test):** wake-gated state machine, chime, gate, one command
 per wake, deterministic parser, absolute volume (`volume 0-100`), explicit mute/unmute, HUD
 states, voice diagnostics. `--voice-self-test` passes: 17 recognition scenarios on synthesized speech,
 including 85 s of conversation at the shipped thresholds with zero wakes and zero commands,
-and real wakes followed by ordinary talk with zero commands. Real-voice confidence, the real
-chime path and the Kinect microphone are **not** yet validated.
+and real wakes followed by ordinary talk with zero commands. First hardware session
+(2026-09-18): wake-gated commands executed as intended and no random actions; occasional
+false wakes (chime/shine only). **Microphone selection is CV** (plus a scratch run of the real
+engine on both local inputs); switching, fallback, Bluetooth loss and persistence are not
+hardware verified.
 
 **Diagnostics panel (10 lines, now under Settings → Advanced diagnostics):**
 1. Tracking: body count, body quality (q x/6), control enabled
@@ -787,10 +934,13 @@ inspect relevant code → smallest coherent change → build Debug → build Rel
    - stabilization latency;
    - guided calibration four-corner reach on the dual-monitor layout.
 2. **Voice on hardware:** everyday conversation near the Kinect for several minutes (expect
-   zero actions; count stray chimes), wake reliability at 0.80 (lower Wake confidence only if
-   needed, watching Last wake), chime audible and not re-triggering, speaking right after the
-   chime, timeout, "cancel", "volume N" incl. 0/100/out of range, mute/unmute, the Kinect mic
-   reconnect issue.
+   zero actions; count stray chimes), normal-voice wake reliability at Wake Sensitivity 65
+   (raise it or the input level with Test wake word if needed, watching the confidence), chime
+   audible and not re-triggering, speaking right after the chime, timeout, "cancel", "volume N"
+   incl. 0/1/73/99/100/out of range, mute/unmute, the Kinect mic
+   reconnect issue. Microphone selector: switch Default → Kinect → laptop → Bluetooth
+   earbuds, wake/command on each, disconnect the selected earbuds while running (fallback, no
+   crash), restart (choice persists).
 3. **Validation of the KINECT-OS UI on the real machine:** acrylic backdrop and custom chrome
    (drag, snap, maximize margin, DPI change between monitors), compact mode round trip,
    widget drag/position persistence, tray menu, live cards while pointing, calibration
@@ -799,10 +949,21 @@ inspect relevant code → smallest coherent change → build Debug → build Rel
 4. Possibly expose clutch timings / scroll dead zone in the UI if hardware testing shows they
    need per-user tuning. They are currently `GestureTuning` constants.
 5. Smoothing default mismatch (Settings 0.2 vs Default button 0.7).
-6. Custom voice commands (editor + storage next to profiles; `VoiceCommandSource.Custom`),
-   `LaunchApp` targets, "move window to display".
-7. AI assistant layer (provider/model selection, intent → catalog actions, workflows). The AI
-   page reserves the place; nothing contacts a service.
+6. **Hardware check of Build 1:** "Jarvis" wake reliability vs "Kinect" (and stray chimes in
+   conversation), recording each app's dictation shortcut and "Claude/GPT/Cursor listen" in
+   and out of the right app, open-app commands, one caption-button set (taskbar minimize, snap,
+   help drawer open, Alt+F4 now that there is no system menu).
+7. "Move window to display".
+8. AI assistant layer ("Build 2", agreed design): the Windows recognizer keeps ONLY the wake
+   word; after the chime the utterance is recorded (≤ 10 s, ends on ~0.7 s silence) and
+   transcribed by the local whisper-server (see the Whisper row in §2; ≈ 0.3 s), then an
+   exact local match (built-in phrases, volume, custom commands) runs instantly and anything
+   else goes to DeepSeek (`deepseek-flash`, tool calling) behind a fixed safe tool list (open
+   app/file/URL, place window on monitor/quadrant, catalog actions, type text - no
+   delete/rename/shell). Also: media ducked while listening, a live step view, a widget AI
+   button with a slide-down chat panel, API key encrypted with DPAPI under %LOCALAPPDATA%.
+   To be built by Codex/Astra in two sessions (core pipeline, then UI). The AI page reserves
+   the place; nothing contacts a service yet.
 
 ## 10. Known gaps / observations
 
@@ -813,7 +974,12 @@ inspect relevant code → smallest coherent change → build Debug → build Rel
 - The log does not record per-frame data. Use Settings → Advanced diagnostics for live values.
 - The acrylic backdrop needs Windows 11 22H2+; older builds get the opaque gradient. The
   offscreen previews always show the opaque fallback.
-- Voice uses the Windows default input device; there is no device picker yet.
+- A selected microphone is captured by the app (WASAPI) rather than opened by the speech
+  engine, so its level meter is the app's own peak meter; System Default still uses the
+  engine's own input. Windows microphone privacy settings can block either (reported as
+  "access denied").
+- Selecting Bluetooth earbuds as the microphone switches them to the hands-free profile, which
+  lowers their playback quality while voice is on - a Windows/Bluetooth limitation.
 - "play" and "pause" both press the media play/pause key (a toggle): Windows exposes no
   explicit play or pause key.
 - The chime plays through the default output device, so at volume 0 or muted it is silent
@@ -823,6 +989,14 @@ inspect relevant code → smallest coherent change → build Debug → build Rel
   thresholds.
 - The Run buttons on the Actions page act on the foreground window, which is KINECT-OS itself
   while you click them (Minimize/Snap will move this window).
+- The main window has no system menu (WS_SYSMENU removed to stop DWM drawing a second set of
+  caption buttons): no Alt+Space menu; whether Alt+F4 still closes it is untested.
+- Shortcuts Windows reserves (Win+H, Win+L…) cannot be recorded by pressing them in the Keys
+  box - type them instead. A custom key combination goes to whatever has keyboard focus in
+  the front window; "only in" checks the app, not which text box is focused.
+- Custom phrases are heard by the same closed grammar, so a sentence beginning with one
+  ("Claude is listening…") after a real wake can in principle match it; the lead/duration
+  checks are the guard, and the self-test's carry-on corpus includes that sentence.
 
 ## 11. Architectural invariants — DO NOT BREAK
 
@@ -876,13 +1050,24 @@ inspect relevant code → smallest coherent change → build Debug → build Rel
 26. `ControlHelp` stays the single source of help text; `HelpHub` is the only route into the
     drawer. New controls get an entry, not inline copy.
 27. Keep the smoke test honest: it must never show a window, open the sensor, start voice,
-    create the tray icon or write `runtime.log` (`RuntimeLog.Suspend()`).
+    create the tray icon, write `runtime.log` (`RuntimeLog.Suspend()`) or save settings
+    (`MainWindow.IsOffscreenCheck`).
 28. **No Windows action from WakeOnly.** The wake grammar and the command grammar are never
-    enabled together, and no grammar ever contains both the wake word and a command.
+    enabled together, and no grammar ever contains both the wake word and a command: a wake
+    word may not be a command phrase and a custom phrase may not contain the wake word.
 29. **One command per wake**, only from a phrase whose speech began after the chime gate, and
     only via `CommandRecognized` → `VoiceViewModel` (session `TryAuthorize` + `TryMarkExecuted`).
-30. **Deterministic voice parsing:** exact phrases and the strict volume pattern only; no
-    substring/fuzzy matching; out-of-range numbers are refused, never clamped. No dictation
-    grammar, no transcription of background speech.
+30. **Deterministic voice parsing:** exact built-in phrases, exact custom phrases (by match
+    key) and the strict volume pattern only; no substring/fuzzy matching; a custom phrase may
+    not shadow a built-in phrase or the volume pattern; out-of-range numbers are refused,
+    never clamped. No dictation grammar, no transcription of background speech.
 31. Changes under `Models/Voice` must keep `--voice-self-test` passing (it never uses the mic,
     the speakers or executes anything).
+32. **One microphone stream at a time; every input change is a full restart.** Switching,
+    fallback and recovery go through `VoiceViewModel` (`RequestReinitialize` / `RetryStart`),
+    which bump the event generation so nothing queued from the previous recognizer runs; the
+    engine closes the capture stream before disposing the recognizer and always restarts in
+    WakeOnly with no session. A new wake word or a changed set of custom phrases is the same
+    kind of full restart.
+33. **A custom key combination limited to an app is only sent when that app's process owns
+    the foreground window** (checked at execution time); otherwise nothing is pressed.

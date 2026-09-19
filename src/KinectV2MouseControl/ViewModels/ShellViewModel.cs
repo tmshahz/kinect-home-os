@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -560,9 +560,14 @@ namespace KinectV2MouseControl
             overlayAlwaysOnTop = s.OverlayAlwaysOnTop;
             OverlayLeft = s.OverlayLeft;
             OverlayTop = s.OverlayTop;
-            Voice.WakeThreshold = s.VoiceWakeThreshold;
+            // Wake Sensitivity is a 0-100 scale. A value at or below 1 is a legacy 0-1 fraction
+            // (an earlier default), so scale it up rather than reading it as ~1%.
+            double sensitivity = s.VoiceWakeSensitivity;
+            Voice.WakeSensitivity = sensitivity <= 1.0 ? sensitivity * 100.0 : sensitivity;
             Voice.CommandThreshold = s.VoiceCommandThreshold;
             Voice.DismissSound = s.VoiceDismissSound;
+            Voice.SetWakeWord(s.VoiceWakePhrase);
+            Voice.SetMicrophonePreference(s.VoiceInputDeviceId, s.VoiceInputDeviceName);
         }
 
         /// <summary>
@@ -586,9 +591,12 @@ namespace KinectV2MouseControl
             s.OverlayLeft = OverlayLeft;
             s.OverlayTop = OverlayTop;
             s.VoiceEnabled = Voice.IsEnabled;
-            s.VoiceWakeThreshold = Voice.WakeThreshold;
+            s.VoiceWakeSensitivity = Voice.WakeSensitivity;
             s.VoiceCommandThreshold = Voice.CommandThreshold;
             s.VoiceDismissSound = Voice.DismissSound;
+            s.VoiceWakePhrase = Voice.WakeWord;
+            s.VoiceInputDeviceId = Voice.PreferredMicrophoneId;
+            s.VoiceInputDeviceName = Voice.PreferredMicrophoneName;
         }
 
         /// <summary>
