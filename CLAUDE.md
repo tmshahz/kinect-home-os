@@ -42,9 +42,9 @@ deterministic parser's refusal, inside the same wake session, and only uses a fi
 `ControlAction.Parameter` carries the `LaunchApp` target and the `SendKeys` combination;
 `ControlAction.Request` carries the assistant-era desktop actions' arguments.
 
-**Longer-term directions, not in code:** Build 2 Shot 2 (compact-widget level ring, AI button,
-slide-down chat panel, media ducking, AI page polish), HUD beyond the compact widget, more
-gestures, "move window to display".
+**Longer-term directions, not in code:** HUD beyond the compact widget, more
+gestures, "move window to display". Consider asynchronous file indexing if the two-second
+bounded personal-file search is noticeable.
 
 Names still inherited from upstream: assembly/exe `KinectV2MouseControl`, namespace
 `KinectV2MouseControl`, AssemblyVersion `1.2.1.0`, the upstream credit line (now in
@@ -120,7 +120,7 @@ Git Bash (use `-p:` not `/p:`; MSYS rewrites `/p:` as a path):
 
 | File | Location | Notes |
 |---|---|---|
-| Last-used settings | `%LOCALAPPDATA%\KinectV2MouseControl\KinectV2MouseControl.exe_Url_<hash>\1.2.1.0\user.config` | .NET user settings, **per exe path** (Debug and Release differ). Saved only on normal close. Tuning + mode + the UI settings (`CompactOnMinimize`, `StartCompact`, `OverlayAlwaysOnTop`, `OverlayLeft/Top`, `VoiceEnabled`, `VoiceWakeSensitivity` (0-100), `VoiceCommandThreshold`, `VoiceDismissSound`, `VoiceInputDeviceId` + `VoiceInputDeviceName` = chosen microphone, empty = System Default, wake word `VoiceWakePhrase` (default "Jarvis"; a stale `VoiceWakeWord` = "Kinect" entry from an earlier build is ignored on purpose)) |
+| Last-used settings | `%LOCALAPPDATA%\KinectV2MouseControl\KinectV2MouseControl.exe_Url_<hash>\1.2.1.0\user.config` | .NET user settings, **per exe path** (Debug and Release differ). Saved only on normal close. Tuning + mode + the UI settings (`CompactOnMinimize`, `StartCompact`, `OverlayAlwaysOnTop`, `OverlayLeft/Top`, `OverlayChatOpen`, `VoiceEnabled`, `VoiceWakeSensitivity` (0-100), `VoiceCommandThreshold`, `VoiceDismissSound`, `VoiceInputDeviceId` + `VoiceInputDeviceName` = chosen microphone, empty = System Default, wake word `VoiceWakePhrase` (default "Jarvis"; a stale `VoiceWakeWord` = "Kinect" entry from an earlier build is ignored on purpose)) |
 | Profiles | `%LOCALAPPDATA%\KinectHomeOS\profiles.json` | 3 slots, shared by all builds. Atomic write. Unreadable file is moved to `profiles.json.bad`. A slot rename is saved immediately |
 | DeepSeek key | `%LOCALAPPDATA%\KinectHomeOS\secrets\deepseek.key` | DPAPI CurrentUser-encrypted; written only by AI → Test key & save after a successful test call; Remove key deletes it. Never in user.config, logs, Activity or the repo; only sent to `https://api.deepseek.com` (redirects disabled) |
 | AI self-test | `%LOCALAPPDATA%\KinectHomeOS\ai-self-test.txt` | Written by `--ai-self-test` (exit 0 = pass, 4 = fail): dry-run action policies + scripted-model tool loop; `--live` adds 3 real DeepSeek requests in dry run when a key is saved |
@@ -150,7 +150,7 @@ src/KinectV2MouseControl/
     ShellViewModel.cs         navigation, help drawer, compact state, activity feed, UI settings, commands; owns the rest
     KinectCursorViewModel.cs  engine settings + Load/Save/defaults/profiles/calibration + LiveStatus refresh (200 ms)
     LiveStatus.cs             bindable engine snapshot (ControlState Off/Standby/Ready/Active, hands, gestures, signal, calibration)
-    VoiceViewModel.cs         voice switch, wake word, custom command list, microphone choice/fallback/retry, thresholds, HUD state, decisions/diagnostics; the ONLY place a voice command is executed
+    VoiceViewModel.cs         voice switch, wake word, custom command list, microphone choice/fallback/retry, thresholds, HUD state, decisions/diagnostics, StartRequestCommand (manual session); the ONLY place a voice command is executed
     CustomCommandRowViewModel.cs  one editable custom command (phrase, kind, keys + "only in" app, target, action)
     VoiceViewModel.Assistant.cs   voice ↔ assistant glue: OtherRequest hook, HUD Thinking/result, cancel, custom/built-in runners for the AI
     AssistantViewModel.cs     AI page: key test/save/remove, model, "Send other requests to AI", typed requests, step log; runs AssistantSession
@@ -160,7 +160,7 @@ src/KinectV2MouseControl/
     ObservableObject.cs       INotifyPropertyChanged base + RelayCommand
   Views/
     MainWindow.xaml(.cs)      the shell: WindowChrome + acrylic, rail, header pills, page host, help drawer; compact/tray wiring
-    OverlayWindow.xaml(.cs)   floating compact widget (status orb, headline, hands, voice, power/expand)
+    OverlayWindow.xaml(.cs)   floating compact widget (status orb, live level ring, voice HUD, AI button, slide-down chat, power/expand)
     Pages/*.xaml(.cs)         HomePage, GesturesPage, VoicePage, ActionsPage, DisplaysPage, ProfilesPage, SettingsPage, AiPage
     Controls/TuningSlider     labelled slider + value box + help glyph (HelpKey must match a ControlHelp title)
     Controls/IconView.cs      draws an Icons.xaml geometry in the inherited Foreground
@@ -515,8 +515,19 @@ A `HandStateFilter` configured from `GestureTuning`:
 - **Compact mode:** `ShellViewModel.WindowRequest` ("compact" / "expand" / "quit") is handled
   by `MainWindow`: `EnterCompact` shows `OverlayWindow` at the remembered position and hides
   the main window; `ExitCompact` reverses it. Minimize → compact when `CompactOnMinimize`.
-  The widget is `AllowsTransparency`, `Topmost` bound to `OverlayAlwaysOnTop`, never activated,
-  draggable, double-click expands; position persists via `OverlayLeft/Top`.
+  The widget is `AllowsTransparency`, `Topmost` bound to `OverlayAlwaysOnTop`, created with
+  `ShowActivated=false` so it does not steal keys. Drag the pill; double-click expands;
+  position persists via `OverlayLeft/Top`. A live level ring around the orb follows
+  `Voice.MicLevel` while a command window is open. Voice HUD states pulse (Listening /
+  Recording) or fade quietly (Transcribing / Thinking); Executed / Rejected stay still, with
+  `LastCommandText` on its own line. The AI button (`Voice.StartRequestCommand`) opens the
+  same command window as a spoken wake (`WakeGatedVoiceEngine.BeginManualSession`); it is
+  disabled while voice is off or a session is already open. A chevron toggles a slide-down
+  chat panel in the same window (`OverlayChatOpen`, remembered). The panel shows
+  `Assistant.Steps` (newest at the bottom, max height ~220 px), `Assistant.Status`, a one-line
+  request box (`Assistant.SubmitCommand` on Enter) and Cancel while busy. It opens on its own
+  when `Assistant.IsBusy` becomes true. A click in the request box calls `Activate()` so
+  typing works; the widget does not activate until then.
 - **Tray:** created on `Loaded`, disposed on `Closed`; Open / Compact / toggle control / Quit.
 - **Quit path:** window Close → `ShellViewModel.Quit()` → voice off, UI settings saved,
   `Engine.Quit()` (SaveSettings, Mode = Disabled via the setter, log). The X button quits;
@@ -761,11 +772,19 @@ looser, Wake Sensitivity moves the floor 0.60-0.90; the isolation gate never mov
 
 ### 4.18 DeepSeek assistant (Build 2 Shot 1, CV)
 
-- **Routing:** a Whisper transcript (or a typed request on the AI page) first goes through the
-  exact local match (`VoiceCommandParser` with the custom phrases). No match → `VoiceIntentKind.
-  Request` → `VoiceViewModel.OtherRequest` → `AssistantViewModel.SubmitAsync`, but only when a
-  key is saved and "Send other requests to AI" (`SendOtherRequestsToAI`, default on) is set;
-  otherwise the HUD says "Not a command". Requests over 4,000 characters are refused.
+- **Routing:** a Whisper transcript (or a typed request on the AI page or the compact-widget
+  chat box) first goes through the exact local match (`VoiceCommandParser` with the custom
+  phrases). No match → `VoiceIntentKind.Request` → `VoiceViewModel.OtherRequest` →
+  `AssistantViewModel.SubmitAsync`, but only when a key is saved and "Send other requests to
+  AI" (`SendOtherRequestsToAI`, default on) is set; otherwise the HUD says "Not a command".
+  Requests over 4,000 characters are refused.
+- **Manual session:** `WakeGatedVoiceEngine.BeginManualSession()` (widget AI button /
+  `Voice.StartRequestCommand`) opens the same window as an accepted wake — session, chime,
+  gate, one command — and does nothing unless the phase is WakeOnly. Source is logged as
+  "button".
+- **Widget chat:** `OverlayWindow` hosts the step log and a one-line request box in the same
+  window as the pill. `OverlayChatOpen` is a UI setting. The panel opens when the assistant
+  becomes busy.
 - **Model:** `DeepSeekClient` posts OpenAI-style `chat/completions` to the fixed origin
   `https://api.deepseek.com` (TLS 1.2, redirects off, 20 s timeout), non-streaming, with
   `thinking: {"type":"disabled"}` (verified against api-docs.deepseek.com during the build).
@@ -826,7 +845,9 @@ hardware yet):** shell with custom chrome + acrylic, nav rail, header status pil
 control toggle, help drawer; Home / Gestures (live gesture cards + advanced tuning) / Voice /
 Actions (catalog + Run) / Displays (monitor layout + hand space + guided calibration) /
 Profiles (3 slots, rename persists) / Settings (UI options, health, diagnostics, activity log,
-guide, about) / AI (placeholder); floating widget; tray icon; activity feed; local voice
+guide, about) / AI (connection, typed request, busy indicator, scrollable step log); floating
+widget (live level ring, voice states, transcript, AI button, slide-down chat); tray icon;
+activity feed; local voice
 commands (System.Speech); new routed actions (window management, media, control on/off,
 LaunchApp). The old settings window, `ParameterControl` and `HelpWindow` are gone.
 
@@ -843,8 +864,14 @@ with the AI page (key, model, typed requests, step log). Covered by `--voice-sel
 real Whisper scenarios), `--ai-self-test` (policies + scripted model) and the smoke test.
 Live DeepSeek calls and everything on hardware are untested.
 
+**Build 2 Shot 2 (CV, 2026-09-20):** compact-widget live level ring, voice-state motion,
+countdown and transcript; AI button that starts a command window without the wake word
+(`BeginManualSession`); slide-down chat panel (`OverlayChatOpen`); AI page grouped into
+connection / request / steps cards. Covered by the smoke test, `--voice-self-test` (manual
+session scenarios) and `--ai-self-test`. Nothing of it is hardware verified.
+
 **Voice (CV + offline acceptance test):** wake-gated state machine, chime, gate, one command
-per wake, deterministic parser, absolute volume (`volume 0-100`), explicit mute/unmute, HUD
+per session (accepted wake or widget button), deterministic parser, absolute volume (`volume 0-100`), explicit mute/unmute, HUD
 states, voice diagnostics. `--voice-self-test` passes: 17 recognition scenarios on synthesized speech,
 including 85 s of conversation at the shipped thresholds with zero wakes and zero commands,
 and real wakes followed by ordinary talk with zero commands. First hardware session
@@ -1047,10 +1074,12 @@ The DeepSeek assistant built on these actions is §4.18.
    search YouTube for lo-fi study music"; "open my resume"; end click and perceived latency
    (runtime.log has the timings); internet off keeps exact commands local; cancel an AI request
    with a new wake, voice off and a double clap; app-name ambiguity and file refusals.
-9. **Build 2 Shot 2:** compact-widget level ring, AI button (starts a session without the wake
-   word and opens the panel), slide-down chat panel attached to the widget, media ducking while
-   recording, AI page polish, fixes from Shot 1 hardware testing. Consider asynchronous file
-   indexing if the two-second bounded personal-file search is noticeable.
+9. **Build 2 Shot 2 on hardware:** the level ring moves while speaking; widget voice states
+   are readable at a glance; the transcript line appears; the AI button opens a session and
+   chimes without the wake word; the chat panel opens, scrolls, accepts a typed request and
+   remembers open/closed after a restart; the widget still drags smoothly and stays on top.
+   Fixes from Shot 1 hardware testing. Consider asynchronous file indexing if the two-second
+   bounded personal-file search is noticeable.
 
 ## 10. Known gaps / observations
 

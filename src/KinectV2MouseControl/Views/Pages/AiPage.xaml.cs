@@ -1,5 +1,7 @@
-using System.Windows.Controls;
+using System.Collections.Specialized;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
 
 namespace KinectV2MouseControl
 {
@@ -16,6 +18,30 @@ namespace KinectV2MouseControl
             HelpBinding.Attach(RequestBox, "Assistant request");
             HelpBinding.Attach(SendButton, "Assistant request");
             HelpBinding.Attach(CancelButton, "Cancel assistant");
+            Loaded += AiPage_Loaded;
+        }
+
+        private void AiPage_Loaded(object sender, RoutedEventArgs e)
+        {
+            ShellViewModel shell = DataContext as ShellViewModel;
+            if (shell == null)
+            {
+                return;
+            }
+
+            shell.Assistant.Steps.CollectionChanged -= Steps_CollectionChanged;
+            shell.Assistant.Steps.CollectionChanged += Steps_CollectionChanged;
+        }
+
+        private void Steps_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            if (StepsScroll == null)
+            {
+                return;
+            }
+
+            StepsScroll.Dispatcher.BeginInvoke(new System.Action(() => StepsScroll.ScrollToEnd()),
+                DispatcherPriority.Loaded);
         }
 
         private async void TestKey_Click(object sender, RoutedEventArgs e)

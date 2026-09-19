@@ -11,9 +11,10 @@
                                Style="{StaticResource Text.BodyDim}"/>
                 </StackPanel>
             </Border>
+
             <Border Style="{StaticResource Card}" Margin="0,16,0,0">
                 <StackPanel>
-                    <TextBlock Text="DEEPSEEK CONNECTION" Style="{StaticResource Text.Eyebrow}"/>
+                    <TextBlock Text="CONNECTION" Style="{StaticResource Text.Eyebrow}"/>
                     <TextBlock Text="API key" Style="{StaticResource Text.Caption}" Margin="0,12,0,4"/>
                     <Border Style="{StaticResource CardInset}" Padding="8,2">
                         <PasswordBox x:Name="KeyBox" MaxLength="512" Padding="6" FontSize="16" Background="Transparent"
@@ -30,23 +31,41 @@
                     <TextBlock Style="{StaticResource Text.Caption}" Text="Audio stays on this PC. DeepSeek receives the request text, display layout, foreground app, available command names and tool results. Window titles are sent only when the assistant requests a window list. Your key is encrypted for your Windows account."/>
                 </StackPanel>
             </Border>
+
             <Border Style="{StaticResource Card}" Margin="0,16,0,0">
                 <StackPanel>
-                    <TextBlock Text="TRY A REQUEST" Style="{StaticResource Text.Eyebrow}"/>
+                    <TextBlock Text="REQUEST" Style="{StaticResource Text.Eyebrow}"/>
                     <TextBlock Text="For example: open Edge and search YouTube for lo-fi study music" Style="{StaticResource Text.Caption}" Margin="0,8,0,8"/>
                     <TextBox x:Name="RequestBox" Style="{StaticResource TextBox.Field}" Text="{Binding Assistant.RequestText, UpdateSourceTrigger=PropertyChanged}"
                              AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" MaxLength="4000"/>
-                    <WrapPanel Margin="0,10,0,8">
+                    <WrapPanel Margin="0,10,0,4">
                         <Button x:Name="SendButton" Content="Run request" Style="{StaticResource Button.Ghost}" Command="{Binding Assistant.SubmitCommand}" Margin="0,0,8,0"/>
                         <Button x:Name="CancelButton" Content="Cancel" Style="{StaticResource Button.Ghost}" Command="{Binding Assistant.CancelCommand}"/>
                     </WrapPanel>
+                    <Grid Height="5" Margin="0,6,0,4" Visibility="{Binding Assistant.IsBusy, Converter={StaticResource BoolToVis}}">
+                        <Border Background="{StaticResource Brush.SurfaceBorder}" CornerRadius="2"/>
+                        <ProgressBar IsIndeterminate="True" Height="5" BorderThickness="0"
+                                     Background="Transparent" Foreground="{StaticResource Brush.Accent}"/>
+                    </Grid>
                     <TextBlock Text="{Binding Assistant.Status}" Style="{StaticResource Text.Body}" Foreground="{StaticResource Brush.Accent}"/>
-                    <TextBlock Text="STEPS" Style="{StaticResource Text.Eyebrow}" Margin="0,18,0,8"/>
-                    <ItemsControl ItemsSource="{Binding Assistant.Steps}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate><TextBlock Text="{Binding}" Style="{StaticResource Text.Caption}" Margin="0,3"/></DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="STEPS" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,8"/>
+                    <Border Style="{StaticResource CardInset}" Padding="12,8">
+                        <ScrollViewer x:Name="StepsScroll" MaxHeight="220" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ItemsControl ItemsSource="{Binding Assistant.Steps}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Style="{StaticResource Text.Caption}" Margin="0,3" TextWrapping="Wrap"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
                 </StackPanel>
             </Border>
         </StackPanel>

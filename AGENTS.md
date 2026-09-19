@@ -42,11 +42,13 @@ Current interaction model:
   remembered, with automatic fallback when it disappears), with a live input meter, an Input
   level (device gain) slider, a Wake Sensitivity slider (default 65 → confidence floor ≈0.65),
   and a Test wake word mode that measures but never executes. **AI** provides a masked key
-  box, test/save/remove, model choice, typed requests and a live step log. New wake, voice off
-  or double clap cancels remaining assistant steps.
+  box, test/save/remove, model choice, typed requests and a live step log. The compact widget
+  has a live level ring, voice-state HUD, an AI button that starts a command window without
+  the wake word, and a slide-down chat panel. New wake, voice off or double clap cancels
+  remaining assistant steps.
 
-Future (NOT implemented): Shot 2 compact-widget redesign (level ring, AI button, chat panel),
-media ducking and polish; more gestures and deeper app control. Build 2 Shot 1 is implemented.
+Future (NOT implemented): HUD beyond the compact widget, more gestures and deeper app
+control. Build 2 Shot 1 and Shot 2 are implemented (COMPILE VERIFIED).
 
 ## 2. Toolchain
 
@@ -161,10 +163,10 @@ Git Bash (dash-style switches, because MSYS mangles `/p:`):
 | `Models/Diagnostics/ActivityLog.cs` | In-memory recent-activity feed (coalescing) shown on Home/Settings |
 | `ViewModels/ShellViewModel.cs` | Navigation, help drawer, compact/tray requests, activity collection, UI settings, commands |
 | `ViewModels/LiveStatus.cs` | Bindable engine snapshot (ControlState Off/Standby/Ready/Active, hands, gestures, signal, calibration) |
-| `ViewModels/VoiceViewModel.cs`, `ActionsViewModel.cs`, `DisplaysViewModel.cs`, `ProfileSlotViewModel.cs` | Page view models. VoiceViewModel also owns the wake word (draft/apply) and the custom command list (validate, save, restart on phrase changes, run) |
+| `ViewModels/VoiceViewModel.cs`, `ActionsViewModel.cs`, `DisplaysViewModel.cs`, `ProfileSlotViewModel.cs` | Page view models. VoiceViewModel also owns the wake word (draft/apply), the custom command list (validate, save, restart on phrase changes, run) and `StartRequestCommand` (manual session from the widget AI button) |
 | `ViewModels/CustomCommandRowViewModel.cs` | One editable custom command row |
 | `Views/MainWindow.xaml(.cs)` | KINECT-OS shell: WindowChrome + acrylic (`WindowBackdrop`), rail, header pills, page host, help drawer, compact mode, tray. Only the app's own caption buttons show (top-right corner, above the drawer); `WindowBackdrop.HideSystemCaptionButtons` removes WS_SYSMENU so DWM stops drawing its own |
-| `Views/OverlayWindow.xaml(.cs)` | Floating compact widget |
+| `Views/OverlayWindow.xaml(.cs)` | Floating compact widget: status orb, live level ring, voice HUD, AI button, slide-down chat panel, power/expand |
 | `Views/Pages/*.xaml` | Home, Gestures, Voice, Actions, Displays, Profiles, Settings, AiPage |
 | `Views/Controls/TuningSlider`, `IconView.cs`, `KeyChordBox.cs` | Labelled slider with help glyph; vector icon control; key-combination recorder box |
 | `Views/ControlHelp.cs`, `HelpHub.cs` | Help text single source; hover/pin routing to the drawer |
@@ -232,8 +234,10 @@ the right points). Double clap works in every mode except Disabled.
 27. **Voice: no Windows action from WakeOnly.** Wake grammar and command grammar are never
     enabled together; no grammar contains both the wake word and a command (a wake word may not
     be a command phrase, and a custom phrase may not contain the wake word); no dictation.
-28. **One command per wake**, only from a phrase whose speech began after the chime gate, only
-    via `CommandRecognized` → `VoiceViewModel` (`TryAuthorize` + `TryMarkExecuted`).
+28. **One command per session.** A session starts from an accepted wake or an explicit user
+    button press; everything after that (gate, one command, generations) is identical. Only a
+    phrase whose speech began after the chime gate is accepted, only via `CommandRecognized` →
+    `VoiceViewModel` (`TryAuthorize` + `TryMarkExecuted`).
     Whisper uses only post-gate samples and never loads a command grammar. Results carry
     both session and input generation; recording/transcription is cancelled on restart.
     An authorized unmatched transcript may create one assistant request with multiple bounded
@@ -325,6 +329,15 @@ Voice (any `Models/Voice` or vocabulary change):
 - [ ] Live meter moves; Input level slider changes the device gain (read-only where unsupported)
 - [ ] Test wake word shows confidence and runs NOTHING
 - [ ] "volume 0/1/73/99/100" set the exact Windows level; "volume 101/200" refused
+- [ ] Widget level ring moves with MicLevel while speaking (Listening / Recording)
+- [ ] Widget states are readable at a glance: Listening and Recording pulse; Transcribing /
+      Thinking fade quietly; Executed / Rejected stay still with the transcript line
+- [ ] AI button on the widget is disabled when voice is off; when on, it chimes and opens a
+      command window without the wake word; a second command in that session is ignored
+- [ ] Chat panel toggles with the chevron, opens when the assistant is busy, scrolls newest
+      at the bottom, accepts a typed request on Enter, Cancel while busy, remembers
+      open/closed after a restart; typing only works after clicking the box
+- [ ] Widget still drags smoothly, stays on top when asked, and never grows much past 460 px
 
 ## 7. Hardware-tested reference configuration (user-reported; preferences, not defaults)
 
@@ -388,6 +401,7 @@ seconds and report partial results; reparse points and network paths are exclude
    find/open resume; end click and perceived latency; internet off keeps exact commands local;
    cancel during AI using wake → stop, voice off and double clap. Test app ambiguity and file
    refusals. Nothing in this build is newly HARDWARE VERIFIED.
-7. **Shot 2:** compact-widget level ring, AI button, slide-down chat panel, media ducking and
-   polish. Consider asynchronous indexing if the bounded two-second personal-file search
-   is perceptible on large folders; current results explicitly flag a time-limited search.
+7. **Shot 2 on hardware:** widget level ring, voice states, transcript, AI button (no wake
+   word), chat panel (open/scroll/type/remember), drag and always-on-top. Fixes from Shot 1
+   hardware testing. Consider asynchronous indexing if the bounded two-second personal-file
+   search is perceptible on large folders; current results explicitly flag a time-limited search.

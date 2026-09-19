@@ -330,6 +330,8 @@ namespace KinectV2MouseControl
             UserControl aiPage = host != null ? host.Content as UserControl : null;
             ScrollViewer aiScroll = aiPage != null ? aiPage.Content as ScrollViewer : null;
             if (aiScroll != null) { aiScroll.ScrollToEnd(); }
+            ScrollViewer stepsScroll = aiPage != null ? aiPage.FindName("StepsScroll") as ScrollViewer : null;
+            if (stepsScroll != null) { stepsScroll.ScrollToEnd(); }
             RenderElement(root, shell, Path.Combine(directory, "shell-Intelligence-steps.png"), width, height, false);
             shell.Assistant.Steps.Clear();
             shell.Navigate(ShellSection.Home);
