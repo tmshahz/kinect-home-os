@@ -248,6 +248,10 @@
     <Compile Include="Models\Voice\VoiceFeedbackSounds.cs" />
     <Compile Include="Models\Voice\VoiceSelfTest.cs" />
     <Compile Include="Models\Voice\WhisperService.cs" />
+    <Compile Include="Models\Actions\SafeDesktopActions.cs" />
+    <Compile Include="Models\Actions\InstalledApps.cs" />
+    <Compile Include="Models\Actions\DesktopWindows.cs" />
+    <Compile Include="Models\Actions\AiSelfTest.cs" />
     <Compile Include="Models\Voice\PcmTapStream.cs" />
     <Compile Include="Models\Voice\WakeGatedVoiceEngine.Whisper.cs" />
     <Compile Include="Models\Voice\AudioInputDevices.cs" />

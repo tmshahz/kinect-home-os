@@ -47,6 +47,28 @@ namespace KinectV2MouseControl
         /// action struct having to carry it.
         /// </summary>
         public string LastSource { get; private set; }
+        public DesktopActionResult LastResult { get; private set; }
+
+        /// <summary>Request context carries file capabilities only for this one assistant request.</summary>
+        public DesktopActionResult ExecuteRequest(ControlAction action, DesktopActionContext context, string source)
+        {
+            if (System.Windows.Application.Current != null) { System.Windows.Application.Current.Dispatcher.VerifyAccess(); }
+            context.Cancellation.ThrowIfCancellationRequested();
+            LastSource = source;
+            if (SafeDesktopActions.Handles(action.Type))
+            {
+                LastResult = SafeDesktopActions.Execute(action, context);
+                if (LastResult.Success && !context.DryRun)
+                {
+                    EventHandler<ControlAction> handler = ActionExecuted;
+                    if (handler != null) { handler(this, action); }
+                }
+                return LastResult;
+            }
+            if (context.DryRun) { return DesktopActionResult.Ok("Would run " + action); }
+            bool done = Execute(action, source);
+            return LastResult = done ? DesktopActionResult.Ok(action.ToString()) : DesktopActionResult.Refused("Could not perform " + action);
+        }
 
         /// <summary>
         /// Accumulates fractional scroll so that sub-notch movement is not simply discarded.
@@ -79,6 +101,10 @@ namespace KinectV2MouseControl
         public bool Execute(ControlAction action, string source)
         {
             LastSource = source ?? GestureSource;
+            if (SafeDesktopActions.Handles(action.Type))
+            {
+                return ExecuteRequest(action, new DesktopActionContext(), LastSource).Success;
+            }
 
             switch (action.Type)
             {

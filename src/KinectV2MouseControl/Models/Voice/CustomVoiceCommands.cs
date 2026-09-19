@@ -296,6 +296,7 @@ namespace KinectV2MouseControl
 
         public static bool IsAssignable(ActionDescriptor descriptor)
         {
+            if (descriptor != null && SafeDesktopActions.Handles(descriptor.Action.Type)) { return false; }
             if (descriptor == null || !descriptor.IsImplemented)
             {
                 return false;

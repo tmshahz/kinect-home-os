@@ -952,6 +952,24 @@ inspect relevant code → smallest coherent change → build Debug → build Rel
 
 ## 9. Backlog (not implemented)
 
+**Build 2 milestone 2 (implemented, COMPILE VERIFIED):** `SafeDesktopActions`, `InstalledApps`
+and `DesktopWindows` sit behind `ActionRouter.ExecuteRequest` on the UI thread. New semantic
+actions launch indexed Start Menu/MSIX apps by name (ambiguity refuses), open http/https URLs,
+search YouTube/Google/Bing, find up to eight newest personal files, open allowed document/media
+files found in that same request, list visible windows, place windows in numbered monitor work
+areas, and type up to 500 Unicode characters. Text input refuses shells/system tools and this
+process. Window ordering uses `DesktopLayout` left-to-right, then top-to-bottom; placement uses
+physical pixels and DWM visible-frame compensation. The existing user-defined custom launch
+and key commands retain their behavior. No arbitrary keys or executable paths are exposed by
+the new parameterized actions. No deletion, rename, file move or shell command action exists.
+
+File search is limited to personal folders, skips reparse points, denies system/program paths,
+and returns explicitly partial results after two seconds. Open revalidates the path/ancestors,
+extension and request capability. `--ai-self-test` verifies policies with a dry-run router,
+temporary fixtures, app ambiguity and one/two-monitor geometry including negative origins.
+Report: `%LOCALAPPDATA%\KinectHomeOS\ai-self-test.txt`, exit 0/4. No physical action is tested.
+The cloud assistant and AI controls are the next milestone.
+
 1. **Hardware validation of the engine phase** (unchanged):
    - fixed hand roles;
    - clutch, and clutch-based scroll/swipe feel (tune `ScrollCurve`, dwell and clutch timings);

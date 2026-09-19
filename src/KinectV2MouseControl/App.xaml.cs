@@ -37,6 +37,18 @@ namespace KinectV2MouseControl
         {
             base.OnStartup(e);
 
+            if (e.Args != null && Array.IndexOf(e.Args, "--ai-self-test") >= 0)
+            {
+                RuntimeLog.Suspend();
+                string report;
+                int result = AiSelfTest.Run(out report);
+                Directory.CreateDirectory(RuntimeLog.DirectoryPath);
+                File.WriteAllText(Path.Combine(RuntimeLog.DirectoryPath, "ai-self-test.txt"), report);
+                Console.Error.WriteLine(report);
+                Shutdown(result);
+                return;
+            }
+
             if (e.Args != null && Array.IndexOf(e.Args, VoiceSelfTestSwitch) >= 0)
             {
                 RuntimeLog.Suspend();

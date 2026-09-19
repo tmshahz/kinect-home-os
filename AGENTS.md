@@ -96,6 +96,9 @@ Git Bash (dash-style switches, because MSYS mangles `/p:`):
 - Local Whisper: `%LOCALAPPDATA%\KinectHomeOS\whisper\` (`bin\whisper-server.exe`,
   `models\ggml-base.en.bin`, `server.log`). Optional test override `KINECTOS_WHISPER_DIR`.
   The hidden loopback server is job-owned and stops with voice. Audio is never saved.
+- `--ai-self-test` performs offline dry-run action checks and writes
+  `%LOCALAPPDATA%\KinectHomeOS\ai-self-test.txt` (exit 0 pass, 4 fail). It never launches apps,
+  opens personal files, types, or moves windows; its file search uses disposable fixtures.
 
 - `user.config` (last-used settings): `%LOCALAPPDATA%\KinectV2MouseControl\...exe_Url_<hash>\1.2.1.0\`
   - it is **per exe path**;
@@ -133,6 +136,8 @@ Git Bash (dash-style switches, because MSYS mangles `/p:`):
 | `Models/CursorControlOutput/KeyboardControl.cs`, `Win32Input.cs` | Alt+Tab chords, `SendChord` (custom key combinations, with scan codes for Electron apps); SendInput plumbing |
 | `Models/Actions/ControlAction.cs`, `ActionRouter.cs` | Semantic actions → Win32 (discrete-action boundary). `Execute(action, source)`; window-management, media, control on/off, `LaunchApp` and `SendKeys` actions |
 | `Models/Actions/ActionCatalog.cs` | Human-readable action index (implemented vs planned) for the Actions page and the voice grammar |
+| `Models/Actions/SafeDesktopActions.cs`, `InstalledApps.cs`, `DesktopWindows.cs` | Bounded desktop actions, per-request file capabilities, installed app lookup, visible windows and physical-pixel work areas |
+| `Models/Actions/AiSelfTest.cs` | `--ai-self-test` dry-run policy and geometry checks |
 | `Models/Voice/WakeGatedVoiceEngine.cs`, `.Whisper.cs` | Wake/session state machine, Windows fallback, post-gate recording and exact parsing, session/generation authorization |
 | `Models/Voice/PcmTapStream.cs`, `WhisperService.cs` | Owned PCM clock/ring, VAD, hidden local server lifecycle and in-memory transcription |
 | `Models/Voice/VoiceSession.cs`, `VoiceGrammars.cs`, `VoiceCommandParser.cs`, `VoiceCommand.cs` | Session/decision types; SRGS wake + command grammars; deterministic parser (built-in phrases → custom phrases → volume pattern) + `SpokenNumber`; built-in command catalog |
@@ -331,6 +336,12 @@ disconnect/reconnect. Disabling them fixed it. It shows as repeated "Sensor UNAV
 in `runtime.log`.
 
 ## 8. Current backlog
+
+Build 2 progress: milestone 1 (Whisper) and milestone 2 (bounded desktop action layer) are
+implemented, COMPILE VERIFIED. DeepSeek and the AI page are still pending. The new actions
+are parameterized and excluded from the simple custom built-in action picker; they use
+`ActionRouter.ExecuteRequest` with per-request context. File searches are capped at two
+seconds and report partial results; reparse points and network paths are excluded.
 
 1. **Hardware validation of the current phase.** Everything below is COMPILE VERIFIED only:
    - fixed hand roles;

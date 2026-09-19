@@ -481,6 +481,11 @@ namespace KinectV2MouseControl
             return kinectCursor.Actions.Execute(action, source);
         }
 
+        public DesktopActionResult ExecuteRequest(ControlAction action, DesktopActionContext context)
+        {
+            return kinectCursor.Actions.ExecuteRequest(action, context, "ai");
+        }
+
         public DesktopLayout Desktop
         {
             get

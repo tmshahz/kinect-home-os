@@ -129,8 +129,8 @@ namespace KinectV2MouseControl
                 ActionCategory.WindowManagement, ControlActionType.SnapWindowRight, null, "snap right"),
             RoutedNoRun("closewindow", "Close window", "Closes the foreground window (Alt+F4). Not offered as a button here, because the foreground window would be this one.",
                 ActionCategory.WindowManagement, ControlActionType.CloseWindow, null, "close window"),
-            Planned("movedisplay", "Move to display", "Send the foreground window to another monitor.",
-                ActionCategory.WindowManagement, "move to display"),
+            RoutedNoRun("placewindow", "Place window", "Place a named window on a monitor and region through the assistant.",
+                ActionCategory.WindowManagement, ControlActionType.PlaceWindow, null, null),
 
             // ---- Media -------------------------------------------------------------------
             Routed("playpause", "Play / pause", "Media play-pause key.", ActionCategory.Media, ControlActionType.PlayPause, null, "play / pause"),
@@ -161,6 +161,13 @@ namespace KinectV2MouseControl
                 ControlAction.Keys(null)),
 
             // ---- Intelligence ------------------------------------------------------------
+            Custom("launchbyname", "Open installed app", "Resolve a Start Menu or installed app name; ambiguous names need an exact choice.", ControlAction.Of(ControlActionType.LaunchAppByName)),
+            Custom("openurl", "Open web page", "Open an http or https page in the default browser or Edge.", ControlAction.Of(ControlActionType.OpenUrl)),
+            Custom("websearch", "Search the web", "Search YouTube, Google or Bing.", ControlAction.Of(ControlActionType.WebSearch)),
+            Custom("findfiles", "Find personal files", "Find up to eight newest matching names in personal folders.", ControlAction.Of(ControlActionType.FindFiles)),
+            Custom("openfile", "Open found file", "Open an allowed document or media file found in the same request.", ControlAction.Of(ControlActionType.OpenFile)),
+            Custom("listwindows", "List windows", "Read visible window titles, processes and monitor numbers.", ControlAction.Of(ControlActionType.ListWindows)),
+            Custom("typetext", "Type text", "Enter up to 500 characters; shells and system tools are refused.", ControlAction.Of(ControlActionType.TypeText)),
             Planned("intent", "Natural-language intent", "An assistant turns a spoken request into one or more actions from this catalog.",
                 ActionCategory.Intelligence, null),
             Planned("workflow", "Workflows", "Named multi-step routines, e.g. “focus mode” = mute, maximize, next window.",

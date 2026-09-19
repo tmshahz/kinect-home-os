@@ -181,5 +181,19 @@ namespace KinectV2MouseControl
 
             SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT)));
         }
+
+        public static bool SendUnicode(string text)
+        {
+            INPUT[] inputs = new INPUT[text.Length * 2];
+            for (int i = 0; i < text.Length; i++)
+            {
+                inputs[i * 2] = CreateKeyInput(0, false);
+                inputs[i * 2].Data.Keyboard.wScan = text[i];
+                inputs[i * 2].Data.Keyboard.dwFlags = 4;
+                inputs[i * 2 + 1] = inputs[i * 2];
+                inputs[i * 2 + 1].Data.Keyboard.dwFlags |= KEYEVENTF_KEYUP;
+            }
+            return SendInput((uint)inputs.Length, inputs, Marshal.SizeOf(typeof(INPUT))) == inputs.Length;
+        }
     }
 }

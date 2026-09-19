@@ -85,7 +85,16 @@ namespace KinectV2MouseControl
         /// Presses a key combination in the foreground window. Parameter carries it as text
         /// ("Ctrl+Shift+D", see KeyChord). Used by custom voice commands.
         /// </summary>
-        SendKeys
+        SendKeys,
+
+        LaunchAppByName,
+        OpenUrl,
+        WebSearch,
+        FindFiles,
+        OpenFile,
+        PlaceWindow,
+        ListWindows,
+        TypeText
     }
 
     /// <summary>
@@ -124,12 +133,14 @@ namespace KinectV2MouseControl
         /// Text payload for actions that need a target, such as LaunchApp.
         /// </summary>
         public string Parameter;
+        public DesktopActionRequest Request;
 
         public ControlAction(ControlActionType type, double value = 0, string parameter = null)
         {
             Type = type;
             Value = value;
             Parameter = parameter;
+            Request = null;
         }
 
         public static ControlAction Of(ControlActionType type)
@@ -192,6 +203,14 @@ namespace KinectV2MouseControl
                 case ControlActionType.Unmute: return "Unmute";
                 case ControlActionType.LaunchApp: return "Launch app";
                 case ControlActionType.SendKeys: return "Key combination";
+                case ControlActionType.LaunchAppByName: return "Open installed app";
+                case ControlActionType.OpenUrl: return "Open web page";
+                case ControlActionType.WebSearch: return "Search the web";
+                case ControlActionType.FindFiles: return "Find personal files";
+                case ControlActionType.OpenFile: return "Open found file";
+                case ControlActionType.PlaceWindow: return "Place window";
+                case ControlActionType.ListWindows: return "List windows";
+                case ControlActionType.TypeText: return "Type text";
                 default: return type.ToString();
             }
         }
