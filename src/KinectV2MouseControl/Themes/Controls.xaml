@@ -60,7 +60,7 @@
         Quiet="{StaticResource Brush.TextDim}" Good="{StaticResource Brush.Success}" Loud="{StaticResource Brush.Warning}"/>
     <local:MicZoneToValueConverter x:Key="MicZoneLabel" Quiet="Too quiet" Good="Good level" Loud="Very loud"/>
 
-    <!-- A dot that breathes while the command window is open. -->
+    <!-- Listening / Recording: a clear pulse. Transcribing / Thinking: a quieter fade. Executed / Rejected stay still. -->
     <Style x:Key="VoicePulseDot" TargetType="Ellipse">
         <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
         <Setter Property="RenderTransform">
@@ -81,6 +81,44 @@
                 </DataTrigger.EnterActions>
                 <DataTrigger.ExitActions>
                     <StopStoryboard BeginStoryboardName="VoiceDotBreath"/>
+                </DataTrigger.ExitActions>
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Voice.HudState}" Value="Recording">
+                <DataTrigger.EnterActions>
+                    <BeginStoryboard x:Name="VoiceDotRecord">
+                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="1" To="0.35" Duration="0:0:0.55"/>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" From="1" To="0.75" Duration="0:0:0.55"/>
+                            <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" From="1" To="0.75" Duration="0:0:0.55"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </DataTrigger.EnterActions>
+                <DataTrigger.ExitActions>
+                    <StopStoryboard BeginStoryboardName="VoiceDotRecord"/>
+                </DataTrigger.ExitActions>
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Voice.HudState}" Value="Transcribing">
+                <DataTrigger.EnterActions>
+                    <BeginStoryboard x:Name="VoiceDotTranscribe">
+                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.85" To="0.4" Duration="0:0:1.05"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </DataTrigger.EnterActions>
+                <DataTrigger.ExitActions>
+                    <StopStoryboard BeginStoryboardName="VoiceDotTranscribe"/>
+                </DataTrigger.ExitActions>
+            </DataTrigger>
+            <DataTrigger Binding="{Binding Voice.HudState}" Value="Thinking">
+                <DataTrigger.EnterActions>
+                    <BeginStoryboard x:Name="VoiceDotThink">
+                        <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0.85" To="0.4" Duration="0:0:1.05"/>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </DataTrigger.EnterActions>
+                <DataTrigger.ExitActions>
+                    <StopStoryboard BeginStoryboardName="VoiceDotThink"/>
                 </DataTrigger.ExitActions>
             </DataTrigger>
         </Style.Triggers>

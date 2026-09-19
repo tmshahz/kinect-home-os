@@ -2270,20 +2270,25 @@ namespace KinectV2MouseControl
                 case VoiceHudState.Recording:
                     SetPhase(VoicePhase.Recording);
                     ShowHud(state, "Hearing you…", "Speak your request");
+                    MicLevel = 0.72;
                     break;
                 case VoiceHudState.Transcribing:
                     SetPhase(VoicePhase.Transcribing);
                     ShowHud(state, "Understanding…", "Transcribing locally");
+                    LastCommandText = "“put ChatGPT on screen two”";
+                    MicLevel = 0.18;
                     break;
                 case VoiceHudState.Thinking:
                     SetPhase(VoicePhase.WakeOnly);
                     ShowHud(state, "Thinking…", "“Put ChatGPT on screen two”");
+                    LastCommandText = "“Put ChatGPT on screen two”";
                     break;
                 case VoiceHudState.Listening:
                     SetPhase(VoicePhase.Listening);
-                    ShowHud(VoiceHudState.Listening, "Listening…", "Say a command");
+                    ShowHud(VoiceHudState.Listening, "Listening… speak now", "Say a command");
                     ListeningRemaining = 0.62;
                     ListeningSecondsText = "2.5 s";
+                    MicLevel = 0.58;
                     break;
                 case VoiceHudState.Executed:
                     SetPhase(VoicePhase.WakeOnly);
@@ -2291,9 +2296,15 @@ namespace KinectV2MouseControl
                     LastCommandText = "“volume seventy”";
                     LastCommandDetail = "Volume → 70% · confidence 0.91";
                     break;
+                case VoiceHudState.Rejected:
+                    SetPhase(VoicePhase.WakeOnly);
+                    ShowOutcome(VoiceOutcome.NotRecognized, "Not a command");
+                    LastCommandText = "“purple bananas”";
+                    break;
                 default:
                     SetPhase(VoicePhase.WakeOnly);
                     HideHud();
+                    MicLevel = 0;
                     break;
             }
 

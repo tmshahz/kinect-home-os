@@ -50,7 +50,7 @@
         </Style>
     </Window.Resources>
 
-    <Grid Margin="16">
+    <Grid Margin="16" MaxWidth="428">
         <Border CornerRadius="20" Background="#EC0C1524"
                 BorderThickness="1" Effect="{StaticResource Effect.WidgetShadow}"
                 MouseLeftButtonDown="Border_MouseLeftButtonDown" Cursor="SizeAll">
@@ -73,8 +73,30 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- Status orb -->
+                <!-- Status orb. The live ring's scale and opacity follow MicLevel; colour follows the HUD. -->
                 <Grid Width="30" Height="30" Margin="0,0,12,0" VerticalAlignment="Center">
+                    <Ellipse Width="30" Height="30" Fill="Transparent" StrokeThickness="2"
+                             Stroke="{Binding Voice.HudState, Converter={StaticResource VoiceBrush}}"
+                             Opacity="{Binding Voice.MicLevel}"
+                             RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False">
+                        <Ellipse.RenderTransform>
+                            <ScaleTransform ScaleX="{Binding Voice.MicLevel, Converter={StaticResource Scale}, ConverterParameter=1.65}"
+                                            ScaleY="{Binding Voice.MicLevel, Converter={StaticResource Scale}, ConverterParameter=1.65}"/>
+                        </Ellipse.RenderTransform>
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Voice.IsCommandWindowOpen}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Voice.HudState}" Value="Recording">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
                     <Ellipse Style="{StaticResource Halo}" Fill="{Binding Status.ControlState, Converter={StaticResource StateBrush}}"/>
                     <Ellipse Width="12" Height="12"
                              Fill="{Binding Status.ControlState, Converter={StaticResource StateBrush}}"
@@ -105,6 +127,39 @@
                         </StackPanel>
                         <TextBlock Text="{Binding Voice.HudDetail}" FontSize="10" Foreground="{StaticResource Brush.TextMuted}"
                                    FontFamily="{StaticResource Font.Text}" TextTrimming="CharacterEllipsis"/>
+                        <Grid Margin="0,8,0,0" Height="4" Visibility="{Binding Voice.IsAwaitingCommand, Converter={StaticResource BoolToVis}}">
+                            <Border Background="{StaticResource Brush.SurfaceBorderStrong}" CornerRadius="2"/>
+                            <Border Background="{StaticResource Brush.AccentGradient}" CornerRadius="2" RenderTransformOrigin="0,0.5"
+                                    Effect="{StaticResource Effect.AccentGlowSoft}">
+                                <Border.RenderTransform>
+                                    <ScaleTransform ScaleX="{Binding Voice.ListeningRemaining}" ScaleY="1"/>
+                                </Border.RenderTransform>
+                            </Border>
+                        </Grid>
+                        <TextBlock Text="{Binding Voice.LastCommandText}" FontSize="10.5"
+                                   Foreground="{StaticResource Brush.TextMuted}"
+                                   FontFamily="{StaticResource Font.Text}"
+                                   TextTrimming="CharacterEllipsis" Margin="0,4,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Voice.HudState}" Value="Transcribing">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Voice.HudState}" Value="Thinking">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Voice.HudState}" Value="Executed">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Voice.HudState}" Value="Rejected">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
                 </Grid>
 

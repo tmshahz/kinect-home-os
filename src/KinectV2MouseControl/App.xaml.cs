@@ -343,11 +343,13 @@ namespace KinectV2MouseControl
                 if (widget != null)
                 {
                     overlay.Content = null;
-                    RenderElement(widget, shell, Path.Combine(directory, "overlay-voice-executed.png"), 460, 110, true);
+                    RenderElement(widget, shell, Path.Combine(directory, "overlay-voice-executed.png"), 460, 150, true);
+                    shell.Voice.PreviewHud(VoiceHudState.Recording);
+                    RenderElement(widget, shell, Path.Combine(directory, "overlay-voice-recording.png"), 460, 150, true);
                     shell.Voice.PreviewHud(VoiceHudState.Listening);
-                    RenderElement(widget, shell, Path.Combine(directory, "overlay-voice-listening.png"), 460, 110, true);
+                    RenderElement(widget, shell, Path.Combine(directory, "overlay-voice-listening.png"), 460, 150, true);
                     shell.Voice.PreviewHud(VoiceHudState.Hidden);
-                    RenderElement(widget, shell, Path.Combine(directory, "overlay-widget.png"), 460, 110, true);
+                    RenderElement(widget, shell, Path.Combine(directory, "overlay-widget.png"), 460, 150, true);
                 }
             }
         }
