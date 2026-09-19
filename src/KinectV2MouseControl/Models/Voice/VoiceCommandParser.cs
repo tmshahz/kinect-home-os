@@ -26,7 +26,8 @@ namespace KinectV2MouseControl
         /// <summary>
         /// A user-defined command. CommandId is its id; the view model looks up what it does.
         /// </summary>
-        Custom
+        Custom,
+        Request
     }
 
     /// <summary>
@@ -94,6 +95,11 @@ namespace KinectV2MouseControl
             intent.Canonical = canonical;
             intent.Feedback = "Cancelled";
             return intent;
+        }
+
+        public static VoiceIntent ForRequest(string transcript)
+        {
+            return new VoiceIntent { Kind = VoiceIntentKind.Request, Canonical = transcript, Feedback = transcript };
         }
 
         public override string ToString()

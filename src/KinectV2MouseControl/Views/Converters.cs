@@ -130,6 +130,9 @@ namespace KinectV2MouseControl
         public object Hidden { get; set; }
         public object Wake { get; set; }
         public object Listening { get; set; }
+        public object Recording { get; set; }
+        public object Transcribing { get; set; }
+        public object Thinking { get; set; }
         public object Executed { get; set; }
         public object Rejected { get; set; }
 
@@ -144,6 +147,9 @@ namespace KinectV2MouseControl
             {
                 case VoiceHudState.Wake: return Wake;
                 case VoiceHudState.Listening: return Listening;
+                case VoiceHudState.Recording: return Recording ?? Listening;
+                case VoiceHudState.Transcribing: return Transcribing ?? Listening;
+                case VoiceHudState.Thinking: return Thinking ?? Listening;
                 case VoiceHudState.Executed: return Executed;
                 case VoiceHudState.Rejected: return Rejected;
                 default: return Hidden;

@@ -41,9 +41,11 @@
         Off="{x:Null}" Standby="{x:Null}" Ready="{StaticResource Effect.AccentGlow}" Active="{StaticResource Effect.SuccessGlow}"/>
 
     <local:VoiceStateToValueConverter x:Key="VoiceBrush"
+        Recording="#54D5B0" Transcribing="#A798FF" Thinking="#E8BB68"
         Hidden="{StaticResource Brush.TextMuted}" Wake="{StaticResource Brush.Accent}" Listening="{StaticResource Brush.Accent}"
         Executed="{StaticResource Brush.Success}" Rejected="{StaticResource Brush.Warning}"/>
     <local:VoiceStateToValueConverter x:Key="VoiceSoftBrush"
+        Recording="#2054D5B0" Transcribing="#20A798FF" Thinking="#20E8BB68"
         Hidden="{StaticResource Brush.NeutralSoft}" Wake="{StaticResource Brush.AccentSoft}" Listening="{StaticResource Brush.AccentSoft}"
         Executed="{StaticResource Brush.SuccessSoft}" Rejected="{StaticResource Brush.WarningSoft}"/>
     <local:VoiceStateToValueConverter x:Key="VoiceGlow"

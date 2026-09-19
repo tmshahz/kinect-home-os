@@ -26,6 +26,7 @@ namespace KinectV2MouseControl
         /// Short, quiet "window closed without a command" tone. Fire and forget.
         /// </summary>
         void PlayDismiss();
+        void PlayListeningEnd();
     }
 
     /// <summary>
@@ -45,6 +46,7 @@ namespace KinectV2MouseControl
 
         private readonly SoundPlayer wakePlayer;
         private readonly SoundPlayer dismissPlayer;
+        private readonly SoundPlayer listeningEndPlayer;
         private readonly TimeSpan wakeDuration;
 
         public VoiceFeedbackSounds()
@@ -53,6 +55,7 @@ namespace KinectV2MouseControl
             wakeDuration = TimeSpan.FromSeconds(wake.Length / (double)PlaybackSampleRate);
             wakePlayer = CreatePlayer(wake);
             dismissPlayer = CreatePlayer(SynthesizeDismiss(PlaybackSampleRate));
+            listeningEndPlayer = CreatePlayer(SynthesizeListeningEnd(PlaybackSampleRate));
         }
 
         public TimeSpan WakeChimeDuration
@@ -85,6 +88,23 @@ namespace KinectV2MouseControl
             {
                 RuntimeLog.Write("Dismiss tone could not play: " + ex.Message);
             }
+        }
+
+        public void PlayListeningEnd()
+        {
+            try { listeningEndPlayer.Play(); }
+            catch (Exception ex) { RuntimeLog.Write("Listening click could not play: " + ex.Message); }
+        }
+
+        public static short[] SynthesizeListeningEnd(int sampleRate)
+        {
+            short[] pcm = new short[(int)(sampleRate * 0.045)];
+            for (int i = 0; i < pcm.Length; i++)
+            {
+                double t = i / (double)sampleRate;
+                pcm[i] = ToSample(0.14 * Math.Sin(2 * Math.PI * 1250 * t) * Attack(t, 0.002) * Math.Exp(-t / 0.008));
+            }
+            return pcm;
         }
 
         private static SoundPlayer CreatePlayer(short[] samples)
@@ -217,6 +237,7 @@ namespace KinectV2MouseControl
         {
             wakePlayer.Dispose();
             dismissPlayer.Dispose();
+            listeningEndPlayer.Dispose();
         }
     }
 }

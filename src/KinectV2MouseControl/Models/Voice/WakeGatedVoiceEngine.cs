@@ -6,6 +6,8 @@ using System.Globalization;
 using System.IO;
 using System.Speech.Recognition;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Text;
 
 namespace KinectV2MouseControl
 {
@@ -50,7 +52,7 @@ namespace KinectV2MouseControl
     /// after the lock is released. Grammar enable/disable runs on the thread pool, outside
     /// the state lock, and always converges to the current phase.
     /// </summary>
-    public sealed class WakeGatedVoiceEngine : IDisposable
+    public sealed partial class WakeGatedVoiceEngine : IDisposable
     {
         /// <summary>
         /// Default wake confidence floor, matching the middle "Wake Sensitivity" position the UI
@@ -187,6 +189,22 @@ namespace KinectV2MouseControl
         private string activeInputId;
         private string activeInputName;
         private MicrophoneCaptureStream capture;
+        private PcmTapStream tap;
+        private WhisperService whisper;
+        private CancellationTokenSource recordingCancellation;
+        private int inputGeneration;
+        private VoiceSpeechEngine activeSpeechEngine;
+
+        public VoiceSpeechEngine SpeechEngine { get; set; }
+        public bool ListeningClickEnabled { get; set; } = true;
+        public string FallbackNotice { get; private set; }
+        public int TranscriptionRequests { get; private set; }
+        public event EventHandler<string> WhisperUnavailable;
+
+        /// <summary>
+        /// Test input goes through the same tap and sample clock as a real microphone.
+        /// </summary>
+        public Func<Stream> InputStreamFactory { get; set; }
 
         /// <summary>
         /// A capture clock more than this far ahead of the recognizer is not trusted.
@@ -430,6 +448,13 @@ namespace KinectV2MouseControl
         {
             error = null;
             Stop();
+            activeSpeechEngine = SpeechEngine;
+            FallbackNotice = "";
+            if (activeSpeechEngine == VoiceSpeechEngine.Whisper && !WhisperService.IsInstalled)
+            {
+                activeSpeechEngine = VoiceSpeechEngine.Windows;
+                FallbackNotice = "Whisper files are unavailable. Using Windows speech recognition.";
+            }
 
             RecognizerInfo info;
             try
@@ -479,11 +504,14 @@ namespace KinectV2MouseControl
                     TryUpdateSetting(created, "AdaptationOn", 0);
 
                     wakeGrammarBuilt = VoiceGrammars.BuildWake(info.Culture, wake);
-                    commands = VoiceGrammars.BuildCommands(info.Culture, custom);
                     created.LoadGrammar(wakeGrammarBuilt);
-                    created.LoadGrammar(commands);
                     wakeGrammarBuilt.Enabled = true;
-                    commands.Enabled = false;
+                    if (activeSpeechEngine == VoiceSpeechEngine.Windows)
+                    {
+                        commands = VoiceGrammars.BuildCommands(info.Culture, custom);
+                        created.LoadGrammar(commands);
+                        commands.Enabled = false;
+                    }
 
                     created.SpeechDetected += OnSpeechDetected;
                     created.SpeechRecognized += OnSpeechRecognized;
@@ -493,7 +521,31 @@ namespace KinectV2MouseControl
                     created.RecognizeCompleted += OnRecognizeCompleted;
 
                     Action<SpeechRecognitionEngine> configure = InputConfigurator;
-                    if (configure != null)
+                    if (activeSpeechEngine == VoiceSpeechEngine.Whisper || InputStreamFactory != null)
+                    {
+                        Stream source;
+                        if (InputStreamFactory != null) { source = InputStreamFactory(); }
+                        else
+                        {
+                            string captureId = deviceId;
+                            string captureName = deviceName;
+                            if (captureId == null)
+                            {
+                                string listError;
+                                AudioInputDevice selected = AudioInputDevices.List(out listError).Find(d => d.IsDefault);
+                                if (selected == null) { throw new IOException(listError ?? "No default microphone is available."); }
+                                captureId = selected.Id;
+                                captureName = selected.Name;
+                            }
+                            string captureError;
+                            stream = MicrophoneCaptureStream.Open(captureId, captureName, out captureError);
+                            if (stream == null) { throw new IOException(captureError); }
+                            source = stream;
+                        }
+                        tap = new PcmTapStream(source);
+                        created.SetInputToAudioStream(tap, MicrophoneCaptureStream.Format);
+                    }
+                    else if (configure != null)
                     {
                         configure(created);
                         deviceId = null;
@@ -535,7 +587,21 @@ namespace KinectV2MouseControl
                         utteranceOpen = false;
                         isHearingSound = false;
                         counters = new VoiceCounters();
-                        backendName = info.Description;
+                        TranscriptionRequests = 0;
+                        backendName = activeSpeechEngine == VoiceSpeechEngine.Whisper ? "Local Whisper · Windows wake word" : info.Description;
+                        inputGeneration++;
+                    }
+
+                    if (activeSpeechEngine == VoiceSpeechEngine.Whisper)
+                    {
+                        WhisperService service = new WhisperService();
+                        whisper = service;
+                        service.Unavailable += (s, e) =>
+                        {
+                            lock (sync) { if (!ReferenceEquals(whisper, service)) { return; } }
+                            Raise(WhisperUnavailable, e);
+                        };
+                        service.Start();
                     }
 
                     created.RecognizeAsync(RecognizeMode.Multiple);
@@ -563,6 +629,7 @@ namespace KinectV2MouseControl
                 }
 
                 CloseCapture(stream);
+                StopWhisper();
                 DisposeRecognizer(created);
                 error = failure.Message;
                 RuntimeLog.Write("Voice start failed: " + (failure is InvalidOperationException ? failure.Message : failure.ToString()));
@@ -608,6 +675,7 @@ namespace KinectV2MouseControl
             // The stream first: a recognizer blocked in Read gets end-of-stream at once, so it
             // can be cancelled and disposed without waiting, and the device is released before
             // any other microphone is opened.
+            StopWhisper();
             CloseCapture(stoppingCapture);
             DisposeRecognizer(stopping);
 
@@ -755,6 +823,8 @@ namespace KinectV2MouseControl
             {
                 return;
             }
+
+            StopWhisper();
 
             // A selected microphone that went away ends its stream; say so rather than
             // reporting a clean end of input.
@@ -938,7 +1008,7 @@ namespace KinectV2MouseControl
                 {
                     EvaluateWake(ev, pending);
                 }
-                else
+                else if (activeSpeechEngine == VoiceSpeechEngine.Windows)
                 {
                     EvaluateCommand(ev, pending);
                 }
@@ -1148,7 +1218,7 @@ namespace KinectV2MouseControl
             }
 
             pending.Decisions.Add(Decision("command", VoiceVerdict.Accepted, ev, intent.Feedback, null, current.Id));
-            pending.Command = new VoiceCommandEventArgs(current, intent, ev.Text, ev.Confidence);
+            pending.Command = new VoiceCommandEventArgs(current, intent, ev.Text, ev.Confidence) { Generation = inputGeneration };
             EndSession(VoiceOutcome.Executed, intent.Feedback, pending);
         }
 
@@ -1300,12 +1370,16 @@ namespace KinectV2MouseControl
                     session.DeadlineUtc = session.GateOpenUtc + commandWindow;
                     session.IsGateOpen = true;
                     phase = VoicePhase.Listening;
-                    ScheduleDeadline(session.Id, commandWindow);
+                    if (activeSpeechEngine == VoiceSpeechEngine.Windows) { ScheduleDeadline(session.Id, commandWindow); }
                     pending.PhaseChange = new VoicePhaseEventArgs(VoicePhase.Listening, session, VoiceOutcome.None, null);
                 }
             }
 
             Run(pending);
+            if (activeSpeechEngine == VoiceSpeechEngine.Whisper && havePosition)
+            {
+                BeginWhisperRecording(sessionId, position);
+            }
         }
 
         /// <summary>
@@ -1315,6 +1389,10 @@ namespace KinectV2MouseControl
         /// </summary>
         private TimeSpan CurrentAudioPosition(SpeechRecognitionEngine engine)
         {
+            lock (sync)
+            {
+                if (activeSpeechEngine == VoiceSpeechEngine.Whisper && tap != null) { return tap.CapturedPosition; }
+            }
             TimeSpan position = engine.AudioPosition;
             MicrophoneCaptureStream stream;
             lock (sync)
@@ -1443,7 +1521,8 @@ namespace KinectV2MouseControl
                     wake = wakeGrammar;
                     commands = commandGrammar;
                     wantWake = phase == VoicePhase.WakeOnly;
-                    wantCommands = phase == VoicePhase.Acknowledging || phase == VoicePhase.Listening;
+                    wantCommands = activeSpeechEngine == VoiceSpeechEngine.Windows
+                        && (phase == VoicePhase.Acknowledging || phase == VoicePhase.Listening);
                 }
 
                 try
@@ -1462,7 +1541,7 @@ namespace KinectV2MouseControl
                     }
                     else
                     {
-                        if (commands.Enabled)
+                        if (commands != null && commands.Enabled)
                         {
                             commands.Enabled = false;
                         }

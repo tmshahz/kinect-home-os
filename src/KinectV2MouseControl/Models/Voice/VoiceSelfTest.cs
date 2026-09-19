@@ -58,7 +58,7 @@ namespace KinectV2MouseControl
             });
         }
 
-        public static int Run(out string report)
+        public static int Run(out string report, bool whisperOnly = false)
         {
             StringBuilder text = new StringBuilder();
             int failures = 0;
@@ -73,7 +73,8 @@ namespace KinectV2MouseControl
             failures += TestSystemVolume(text);
             failures += TestMicrophones(text);
             failures += TestChime(text);
-            failures += TestRecognition(text);
+            if (!whisperOnly) { failures += TestRecognition(text); }
+            failures += TestWhisper(text);
 
             text.AppendLine();
             text.AppendLine(failures == 0 ? "VOICE SELF-TEST PASSED" : "VOICE SELF-TEST FAILED (" + failures + ")");
@@ -144,6 +145,8 @@ namespace KinectV2MouseControl
                 new[] { "volume 37%", "Volume → 37%" },
                 new[] { "set volume to fifty percent", "Volume → 50%" },
                 new[] { "set volume twenty five", "Volume → 25%" },
+                new[] { "Set the volume to 30.", "Volume → 30%" },
+                new[] { "Mute.", "Mute" },
                 new[] { "volume 200", "-" },
                 new[] { "volume two hundred", "-" },
                 new[] { "volume one hundred and one", "-" },
@@ -437,6 +440,7 @@ namespace KinectV2MouseControl
             }
 
             WakeGatedVoiceEngine engine = new WakeGatedVoiceEngine();
+            engine.SpeechEngine = VoiceSpeechEngine.Windows;
             engine.InputDeviceId = "{0.0.1.00000000}.{00000000-0000-0000-0000-000000000000}";
             engine.InputDeviceName = "Missing test microphone";
             string startError;
@@ -478,6 +482,7 @@ namespace KinectV2MouseControl
             public double Tail = 1.0;
             public string WakeWord = Wake;
             public CustomPhraseSet Custom = StarterPhrases();
+            public VoiceSpeechEngine SpeechEngine = VoiceSpeechEngine.Windows;
 
             public Scenario Say(string words, string voice = David)
             {
@@ -500,6 +505,7 @@ namespace KinectV2MouseControl
             public readonly List<double> GateLatencies = new List<double>();
             public readonly List<double> ChimeLatencies = new List<double>();
             public int Chimes;
+            public int Transcriptions;
             public VoiceCounters Counters;
             public string Error;
             public double AudioSeconds;
@@ -689,6 +695,59 @@ namespace KinectV2MouseControl
             return failures;
         }
 
+        private static int TestWhisper(StringBuilder text)
+        {
+            int failures = 0;
+            VoiceIntent parsed;
+            string reason;
+            if (!VoiceCommandParser.TryParse("Claude, listen.", StarterPhrases(), out parsed, out reason) || parsed.CommandId != "claude")
+            { text.AppendLine("FAIL Whisper punctuation for custom phrase"); failures++; }
+
+            // High-energy samples before the gate must not become a recording, even without
+            // relying on a recognizer or model to reject them.
+            byte[] priorSpeech = new byte[16000 * 2 * 7];
+            for (int i = 0; i < 16000 * 2; i += 2) { priorSpeech[i + 1] = 50; }
+            using (PcmTapStream tap = new PcmTapStream(new MemoryStream(priorSpeech)))
+            {
+                VoiceRecording recording = PostGateRecorder.RecordAsync(tap, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(4),
+                    () => { }, CancellationToken.None).GetAwaiter().GetResult();
+                if (recording != null) { text.AppendLine("FAIL pre-gate audio was included"); failures++; }
+                else { text.AppendLine("PASS post-gate recorder excludes earlier speech and sends no silence"); }
+            }
+            if (!WhisperService.IsEmptyTranscript("[BLANK_AUDIO]", 1) || !WhisperService.IsEmptyTranscript("(music)", 1)
+                || !WhisperService.IsEmptyTranscript("Thanks for watching.", 1) || WhisperService.IsEmptyTranscript("Mute.", 1))
+            { text.AppendLine("FAIL silence transcript filtering"); failures++; }
+            else { text.AppendLine("PASS Whisper silence transcript filtering"); }
+            if (!WhisperService.IsInstalled)
+            {
+                text.AppendLine("SKIP real Whisper scenarios: installation missing at " + WhisperService.Root);
+                return failures;
+            }
+            List<Scenario> scenarios = new List<Scenario>
+            {
+                new Scenario { Name = "Whisper volume thirty", SpeechEngine = VoiceSpeechEngine.Whisper, Tail = 7,
+                    ExpectedCommands = new[] { "Volume → 30%" } }.Wait(0.8).Say(Wake).Wait(1.2).Say("set the volume to thirty"),
+                new Scenario { Name = "Whisper Claude listen", SpeechEngine = VoiceSpeechEngine.Whisper, Tail = 7,
+                    ExpectedCommands = new[] { "Claude listen" } }.Wait(0.8).Say(Wake).Wait(1.2).Say("Claude listen"),
+                new Scenario { Name = "Whisper silence", SpeechEngine = VoiceSpeechEngine.Whisper, Tail = 7,
+                    ExtraCheck = r => r.Outcomes.Contains(VoiceOutcome.TimedOut) && r.Transcriptions == 0 ? null : "silence did not time out without transcription" }.Wait(0.8).Say(Wake),
+                new Scenario { Name = "Whisper ignores pre-chime speech", SpeechEngine = VoiceSpeechEngine.Whisper, Tail = 7,
+                    ExpectedCommands = new[] { "Volume → 30%" } }.Wait(0.8).Say("mute").Wait(0.8).Say(Wake).Wait(1.2).Say("set the volume to thirty")
+            };
+            foreach (Scenario scenario in scenarios)
+            {
+                Stopwatch clock = Stopwatch.StartNew();
+                ScenarioResult result = RunScenario(scenario, TestWakeThreshold, TestCommandThreshold);
+                string issue = result.Error ?? (SameList(result.Commands, scenario.ExpectedCommands) ? null : "unexpected transcript/action");
+                if (issue == null && scenario.ExtraCheck != null) { issue = scenario.ExtraCheck(result); }
+                text.AppendLine((issue == null ? "PASS " : "FAIL ") + scenario.Name + " (" + clock.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) + " s) " + issue);
+                if (issue != null) { AppendDetail(text, result); }
+                else { foreach (string decision in result.Decisions) { text.AppendLine("        " + decision); } }
+                if (issue != null) { failures++; }
+            }
+            return failures;
+        }
+
         private static string Describe(List<double> values)
         {
             List<double> sorted = new List<double>(values);
@@ -821,6 +880,8 @@ namespace KinectV2MouseControl
             LoopbackFeedback feedback = new LoopbackFeedback(microphone);
             WakeGatedVoiceEngine engine = new WakeGatedVoiceEngine();
             engine.Feedback = feedback;
+            engine.SpeechEngine = scenario.SpeechEngine;
+            if (scenario.SpeechEngine == VoiceSpeechEngine.Whisper) { engine.InputStreamFactory = () => microphone; }
             engine.InputConfigurator = recognizer => recognizer.SetInputToAudioStream(microphone, Format);
             engine.WakeWord = scenario.WakeWord;
             engine.CustomPhrases = scenario.Custom;
@@ -887,6 +948,7 @@ namespace KinectV2MouseControl
 
             finished.WaitOne(TimeSpan.FromSeconds(result.AudioSeconds + 15));
             result.Counters = engine.Counters;
+            result.Transcriptions = engine.TranscriptionRequests;
             result.Chimes = feedback.Chimes;
             engine.Dispose();
             return result;
@@ -1157,6 +1219,8 @@ namespace KinectV2MouseControl
             {
                 microphone.Inject(dismiss, OutputLatency, EchoGain);
             }
+
+            public void PlayListeningEnd() { }
         }
     }
 }

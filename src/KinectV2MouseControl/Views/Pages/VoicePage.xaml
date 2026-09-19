@@ -381,6 +381,13 @@
                         </Grid>
 
                         <!-- Test wake word (never runs a command) -->
+                        <TextBlock Text="Speech engine" Style="{StaticResource Text.Caption}" Margin="0,10,0,4"/>
+                        <ComboBox x:Name="SpeechEngineBox" Style="{StaticResource ComboBox.Field}" ItemsSource="{Binding Voice.SpeechEngines}"
+                                  SelectedItem="{Binding Voice.SpeechEngine, Mode=TwoWay}" Margin="0,0,0,8"/>
+                        <TextBlock Text="{Binding Voice.SpeechEngineNotice}" Style="{StaticResource Text.Caption}"
+                                   Foreground="{StaticResource Brush.Warning}" TextWrapping="Wrap"/>
+                        <CheckBox x:Name="ListeningClickCheck" Content="End of listening sound" Style="{StaticResource Toggle}"
+                                  IsChecked="{Binding Voice.ListeningClick, Mode=TwoWay}" Margin="0,8,0,8"/>
                         <Button x:Name="TestWakeButton" Command="{Binding Voice.TestWakeCommand}" Style="{StaticResource Button.Ghost}"
                                 HorizontalAlignment="Left" Margin="0,10,0,0"
                                 BorderBrush="{Binding Voice.IsTestMode, Converter={StaticResource OnBorderBrush}}">

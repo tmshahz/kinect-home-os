@@ -122,7 +122,7 @@ Git Bash (use `-p:` not `/p:`; MSYS rewrites `/p:` as a path):
 |---|---|---|
 | Last-used settings | `%LOCALAPPDATA%\KinectV2MouseControl\KinectV2MouseControl.exe_Url_<hash>\1.2.1.0\user.config` | .NET user settings, **per exe path** (Debug and Release differ). Saved only on normal close. Tuning + mode + the UI settings (`CompactOnMinimize`, `StartCompact`, `OverlayAlwaysOnTop`, `OverlayLeft/Top`, `VoiceEnabled`, `VoiceWakeSensitivity` (0-100), `VoiceCommandThreshold`, `VoiceDismissSound`, `VoiceInputDeviceId` + `VoiceInputDeviceName` = chosen microphone, empty = System Default, wake word `VoiceWakePhrase` (default "Jarvis"; a stale `VoiceWakeWord` = "Kinect" entry from an earlier build is ignored on purpose)) |
 | Profiles | `%LOCALAPPDATA%\KinectHomeOS\profiles.json` | 3 slots, shared by all builds. Atomic write. Unreadable file is moved to `profiles.json.bad`. A slot rename is saved immediately |
-| Local Whisper (Build 2) | `%LOCALAPPDATA%\KinectHomeOS\whisper\` | Set up 2026-09-20, not yet used by the app: `bin\` = whisper.cpp v1.9.4 x64 CPU build, `models\ggml-base.en.bin`, `test\*.wav`, `README.md` with checksums, measured speeds (whisper-server + `audio_ctx=512` ≈ 0.3 s per command on this laptop) and the recommended integration. Outside the repo, shared by all builds |
+| Local Whisper (Build 2) | `%LOCALAPPDATA%\KinectHomeOS\whisper\` | Default command transcription: `bin\` = whisper.cpp v1.9.4 x64 CPU, `models\ggml-base.en.bin`, `test\*.wav`, `README.md`, `server.log`. Hidden job-owned loopback server, four CPU threads; no audio files saved. Optional test override `KINECTOS_WHISPER_DIR` |
 | Custom voice commands | `%LOCALAPPDATA%\KinectHomeOS\voice-commands.json` | Shared by all builds. Saved ~0.6 s after an edit and on quit, atomic write. Missing = the 3 starters (not written until edited). Unreadable → `voice-commands.json.bad` |
 | Runtime log | `%LOCALAPPDATA%\KinectHomeOS\runtime.log` (+ `runtime.prev.log`) | Human-rate event log, fresh each launch. **Ask the user for it when diagnosing intermittent issues** |
 | UI smoke test | `%LOCALAPPDATA%\KinectHomeOS\ui-smoke-test.txt`, `ui-preview\*.png` | Written by `--ui-smoke-test` only |
@@ -235,6 +235,8 @@ src/KinectV2MouseControl/
 | `sensor.IsAvailableChanged` | UI thread | on change |
 | `WakeGatedVoiceEngine` recognizer events | thread pool (the recognizer is created on a private thread with no synchronization context); state under one lock; `VoiceViewModel` marshals every engine event with `Dispatcher.BeginInvoke` before `ActionRouter.Execute` | on speech |
 | Wake chime + gate | one background thread per wake (plays the chime, then opens the gate) | per wake |
+| Whisper PCM tap + recording | owned capture pump and async VAD worker, 16 kHz mono; indexed ring uses the capture sample clock | 20 ms frames |
+| Whisper server / transcription | hidden job-owned process; async loopback HTTP off the UI thread, 5 s request timeout | per authorized recording |
 | Command-window deadline | `System.Threading.Timer` | 4 s (+2.5 s once if a command is mid-utterance) |
 | Voice grammar switch | thread pool, outside the state lock, converges to the current phase | per phase change |
 | Voice HUD countdown / mic level / diagnostics | `DispatcherTimer` in `VoiceViewModel` while voice is on | 50 ms |
@@ -517,6 +519,29 @@ A `HandStateFilter` configured from `GestureTuning`:
   profiles/defaults; voice). Capacity 200, newest first in `Shell.Activity`.
 
 ### 4.16 Voice: wake-gated, local, off by default
+
+**Build 2 milestone 1 — default Whisper path (COMPILE VERIFIED):** `VoiceSpeechEngine`
+selects Whisper (default) or the Windows command-grammar fallback described below. Windows
+listens only for the wake word in Whisper mode. After the chime all grammars are disabled;
+the owned microphone (including System Default) keeps feeding a 16 kHz PCM tap/ring.
+`PcmTapStream` / `PostGateRecorder` use the capture sample clock for the gate; only samples
+at/after it are recorded. Energy VAD requires about 150 ms speech, waits up to 4 s for onset,
+ends after 0.7 s silence, and caps recording at 10 s. Silence sends no request. Empty/token
+and short known hallucinations are discarded. `WhisperService` owns the hidden server via
+a kill-on-close Job Object, loopback-only HTTP, drained output, three startup/restart attempts
+with backoff. Missing files or repeated startup failures show a Windows fallback notice.
+
+Multipart inference uses in-memory WAV, text output, temperature 0, audio_ctx 512 and wake /
+custom phrases / app-name vocabulary. Exact parser matches use the existing execution path;
+unmatched text currently shows "Not a command". Session authorization and input-generation
+checks drop stale results, including at UI dispatch. Voice off/input changes cancel recording
+and transcription and close the server. HUD adds Recording / Transcribing / Thinking; the
+optional `VoiceListeningClick` marks recording end. Diagnostics log speech-end → transcript
+and transcript → action times. Synthetic real-server tests measured about 0.96–1.00 s from
+speech end to transcript including the 0.7 s endpoint wait. Hardware timing remains unverified.
+
+The grammar confidence/utterance acceptance details below describe the **Windows fallback**;
+wake isolation and execution authorization apply to both modes. The assistant is not wired yet.
 
 **Interaction:** say the wake word on its own → ✦ chime → one command within 4 s → done, back
 to waiting for the wake word. The wake word is the user's (Voice page, 1-3 words, default
@@ -975,8 +1000,8 @@ inspect relevant code → smallest coherent change → build Debug → build Rel
 - The acrylic backdrop needs Windows 11 22H2+; older builds get the opaque gradient. The
   offscreen previews always show the opaque fallback.
 - A selected microphone is captured by the app (WASAPI) rather than opened by the speech
-  engine, so its level meter is the app's own peak meter; System Default still uses the
-  engine's own input. Windows microphone privacy settings can block either (reported as
+  engine, so its level meter is the app's own peak meter; System Default uses owned capture
+  in Whisper mode and the recognizer's input in Windows mode. Privacy settings can block either (reported as
   "access denied").
 - Selecting Bluetooth earbuds as the microphone switches them to the hands-free profile, which
   lowers their playback quality while voice is on - a Windows/Bluetooth limitation.
@@ -1055,8 +1080,10 @@ inspect relevant code → smallest coherent change → build Debug → build Rel
 28. **No Windows action from WakeOnly.** The wake grammar and the command grammar are never
     enabled together, and no grammar ever contains both the wake word and a command: a wake
     word may not be a command phrase and a custom phrase may not contain the wake word.
+    Whisper mode loads only the wake grammar and disables it during recording/transcription.
 29. **One command per wake**, only from a phrase whose speech began after the chime gate, and
     only via `CommandRecognized` → `VoiceViewModel` (session `TryAuthorize` + `TryMarkExecuted`).
+    Whisper transcribes only post-gate PCM; results must match session and input generation.
 30. **Deterministic voice parsing:** exact built-in phrases, exact custom phrases (by match
     key) and the strict volume pattern only; no substring/fuzzy matching; a custom phrase may
     not shadow a built-in phrase or the volume pattern; out-of-range numbers are refused,

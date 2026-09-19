@@ -11,6 +11,8 @@ namespace KinectV2MouseControl
         {
             InitializeComponent();
             HelpBinding.Attach(VoiceToggle, "Voice commands");
+            HelpBinding.Attach(SpeechEngineBox, "Speech engine");
+            HelpBinding.Attach(ListeningClickCheck, "End of listening sound");
             HelpBinding.Attach(DismissSoundCheck, "Dismiss sound");
             HelpBinding.Attach(MicrophoneBox, "Microphone");
             HelpBinding.Attach(TestWakeButton, "Test wake word");

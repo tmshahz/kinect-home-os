@@ -40,7 +40,7 @@ namespace KinectV2MouseControl
             if (e.Args != null && Array.IndexOf(e.Args, VoiceSelfTestSwitch) >= 0)
             {
                 RuntimeLog.Suspend();
-                Shutdown(RunVoiceSelfTest());
+                Shutdown(RunVoiceSelfTest(Array.IndexOf(e.Args, "--whisper-only") >= 0));
                 return;
             }
 
@@ -63,7 +63,7 @@ namespace KinectV2MouseControl
             window.Show();
         }
 
-        private static int RunVoiceSelfTest()
+        private static int RunVoiceSelfTest(bool whisperOnly)
         {
             string report = "";
             int code = 3;
@@ -74,7 +74,7 @@ namespace KinectV2MouseControl
             {
                 try
                 {
-                    code = VoiceSelfTest.Run(out report);
+                    code = VoiceSelfTest.Run(out report, whisperOnly);
                 }
                 catch (Exception ex)
                 {
@@ -271,6 +271,11 @@ namespace KinectV2MouseControl
             shell.Voice.PreviewHud(VoiceHudState.Listening);
             shell.Navigate(ShellSection.Voice);
             RenderElement(root, shell, Path.Combine(directory, "shell-Voice-listening.png"), width, height, false);
+            foreach (VoiceHudState processing in new[] { VoiceHudState.Recording, VoiceHudState.Transcribing, VoiceHudState.Thinking })
+            {
+                shell.Voice.PreviewHud(processing);
+                RenderElement(root, shell, Path.Combine(directory, "shell-Voice-" + processing + ".png"), width, height, false);
+            }
             shell.Voice.PreviewHud(VoiceHudState.Executed);
             RenderElement(root, shell, Path.Combine(directory, "shell-Voice-executed.png"), width, height, false);
 
@@ -282,6 +287,13 @@ namespace KinectV2MouseControl
             UIElement voiceContent = voiceScroll != null ? voiceScroll.Content as UIElement : null;
             if (voiceScroll != null && micBox != null && voiceContent != null)
             {
+                FrameworkElement speechBox = voicePage.FindName("SpeechEngineBox") as FrameworkElement;
+                if (speechBox != null)
+                {
+                    Point speechAt = speechBox.TranslatePoint(new Point(0, 0), voiceContent);
+                    voiceScroll.ScrollToVerticalOffset(Math.Max(0, speechAt.Y - 180));
+                    RenderElement(root, shell, Path.Combine(directory, "shell-Voice-engine.png"), width, height, false);
+                }
                 Point micAt = micBox.TranslatePoint(new Point(0, 0), voiceContent);
                 voiceScroll.ScrollToVerticalOffset(Math.Max(0, micAt.Y - 260));
                 RenderElement(root, shell, Path.Combine(directory, "shell-Voice-microphone.png"), width, height, false);

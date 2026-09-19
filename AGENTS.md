@@ -29,8 +29,11 @@ Current interaction model:
 - **Voice (beta, off by default), strictly wake-gated:** say the wake word ("Jarvis" by
   default, user-editable on the Voice page, 1-3 words) on its own → ✦ chime → ONE command
   within 4 s ("volume 70", "mute", "next window", or a custom command) → back to waiting.
-  Anything said without that cycle does nothing. Local Windows speech recognizer, routed like
-  gestures. **Custom commands** (Voice page → Your commands): the user's own phrase → a key
+  Begin speaking within 4 s. Whisper (default) records only post-chime audio, ends after 0.7 s
+  silence (10 s cap), and transcribes locally. Windows recognizes only the wake word in this
+  mode; the selectable Windows fallback retains command grammars. Missing/broken Whisper
+  automatically falls back with a notice. Exact local matches route like gestures; unmatched
+  text currently shows "Not a command". **Custom commands** (Voice page → Your commands): the user's own phrase → a key
   combination (optionally only when a named app is in front, e.g. "Claude listen" →
   Ctrl+Shift+D only in `claude`), opening an app/file/URL, or a built-in action. Starters
   "GPT listen" / "Claude listen" / "Cursor listen" ship with blank keys.
@@ -39,8 +42,8 @@ Current interaction model:
   level (device gain) slider, a Wake Sensitivity slider (default 65 → confidence floor ≈0.65),
   and a Test wake word mode that measures but never executes. **AI** = placeholder section only.
 
-Future (NOT implemented): the assistant layer (DeepSeek + speech-to-text, planned as "Build
-2"), more gestures, "move window to display", deeper app control.
+Future (NOT implemented): the DeepSeek assistant, more gestures, "move window to display",
+deeper app control. Build 2 milestone 1 (local Whisper) is implemented.
 
 ## 2. Toolchain
 
@@ -58,7 +61,9 @@ Future (NOT implemented): the assistant layer (DeepSeek + speech-to-text, planne
 - **Voice check without a microphone:** `bin\Debug\KinectV2MouseControl.exe --voice-self-test`
   (~5 min, exit 0 = pass, 3 = fail). Parser, grammars, Core Audio round trip, chime, then the
   real wake-gated engine on synthesized speech with the chime looped back as echo; commands
-  are recorded, never executed. Report: `%LOCALAPPDATA%\KinectHomeOS\voice-self-test.txt`.
+  are recorded, never executed. Also runs four real Whisper scenarios when installed (SKIP
+  only if files are missing); `--whisper-only` focuses on those plus unit checks.
+  Report: `%LOCALAPPDATA%\KinectHomeOS\voice-self-test.txt`.
 
 ### Build (both must pass, target 0 errors / 0 warnings)
 
@@ -87,6 +92,10 @@ Git Bash (dash-style switches, because MSYS mangles `/p:`):
 - `bin/` and `obj/` are git-ignored. **Never commit exes or build output.**
 
 ### Runtime files
+
+- Local Whisper: `%LOCALAPPDATA%\KinectHomeOS\whisper\` (`bin\whisper-server.exe`,
+  `models\ggml-base.en.bin`, `server.log`). Optional test override `KINECTOS_WHISPER_DIR`.
+  The hidden loopback server is job-owned and stops with voice. Audio is never saved.
 
 - `user.config` (last-used settings): `%LOCALAPPDATA%\KinectV2MouseControl\...exe_Url_<hash>\1.2.1.0\`
   - it is **per exe path**;
@@ -124,7 +133,8 @@ Git Bash (dash-style switches, because MSYS mangles `/p:`):
 | `Models/CursorControlOutput/KeyboardControl.cs`, `Win32Input.cs` | Alt+Tab chords, `SendChord` (custom key combinations, with scan codes for Electron apps); SendInput plumbing |
 | `Models/Actions/ControlAction.cs`, `ActionRouter.cs` | Semantic actions → Win32 (discrete-action boundary). `Execute(action, source)`; window-management, media, control on/off, `LaunchApp` and `SendKeys` actions |
 | `Models/Actions/ActionCatalog.cs` | Human-readable action index (implemented vs planned) for the Actions page and the voice grammar |
-| `Models/Voice/WakeGatedVoiceEngine.cs` | Voice state machine WakeOnly → Acknowledging (chime) → Listening (4 s); wake/command acceptance (confidence, lead, pre-silence, duration, gate), timeout, one command per wake |
+| `Models/Voice/WakeGatedVoiceEngine.cs`, `.Whisper.cs` | Wake/session state machine, Windows fallback, post-gate recording and exact parsing, session/generation authorization |
+| `Models/Voice/PcmTapStream.cs`, `WhisperService.cs` | Owned PCM clock/ring, VAD, hidden local server lifecycle and in-memory transcription |
 | `Models/Voice/VoiceSession.cs`, `VoiceGrammars.cs`, `VoiceCommandParser.cs`, `VoiceCommand.cs` | Session/decision types; SRGS wake + command grammars; deterministic parser (built-in phrases → custom phrases → volume pattern) + `SpokenNumber`; built-in command catalog |
 | `Models/Voice/VoiceWakeWord.cs` | `VoicePhrases` (grammar tokens with acronym spelling "GPT" → "G P T", match keys, "Kinect" IPA) and `VoiceWakeWord` (default "Jarvis", validation, max duration) |
 | `Models/Voice/CustomVoiceCommands.cs` | `CustomCommandDefinition` (stored), `CustomCommandStore` (voice-commands.json), `CustomCommandRules` (phrase rules, assignable actions), `CustomPhraseSet` (frozen phrases the running recognizer listens for) |
@@ -209,6 +219,8 @@ the right points). Double clap works in every mode except Disabled.
     be a command phrase, and a custom phrase may not contain the wake word); no dictation.
 28. **One command per wake**, only from a phrase whose speech began after the chime gate, only
     via `CommandRecognized` → `VoiceViewModel` (`TryAuthorize` + `TryMarkExecuted`).
+    Whisper uses only post-gate samples and never loads a command grammar. Results carry
+    both session and input generation; recording/transcription is cancelled on restart.
 29. Voice parsing is exact (catalog phrases, then the user's custom phrases by match key, then
     the strict volume pattern); out-of-range volume is refused, never clamped. A custom phrase
     may not shadow a built-in phrase or the volume pattern. Keep `--voice-self-test` passing

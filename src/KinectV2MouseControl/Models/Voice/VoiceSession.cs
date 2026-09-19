@@ -33,7 +33,9 @@ namespace KinectV2MouseControl
         /// <summary>
         /// The command window: one phrase that begins after the chime may be accepted.
         /// </summary>
-        Listening
+        Listening,
+        Recording,
+        Transcribing
     }
 
     public enum VoiceOutcome
@@ -103,6 +105,8 @@ namespace KinectV2MouseControl
         public DateTime GateOpenUtc { get; internal set; }
         public DateTime DeadlineUtc { get; internal set; }
         public bool IsGateOpen { get; internal set; }
+        public DateTime SpeechEndUtc { get; internal set; }
+        public DateTime TranscriptUtc { get; internal set; }
         internal bool Extended { get; set; }
 
         public VoiceOutcome Outcome { get; internal set; }
@@ -254,6 +258,7 @@ namespace KinectV2MouseControl
     /// </summary>
     public sealed class VoiceCommandEventArgs : EventArgs
     {
+        internal int Generation { get; set; }
         public VoiceCommandEventArgs(VoiceSession session, VoiceIntent intent, string phrase, double confidence)
         {
             Session = session;

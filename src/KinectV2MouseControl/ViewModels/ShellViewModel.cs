@@ -566,6 +566,9 @@ namespace KinectV2MouseControl
             Voice.WakeSensitivity = sensitivity <= 1.0 ? sensitivity * 100.0 : sensitivity;
             Voice.CommandThreshold = s.VoiceCommandThreshold;
             Voice.DismissSound = s.VoiceDismissSound;
+            VoiceSpeechEngine speechEngine;
+            Voice.SpeechEngine = Enum.TryParse(s.VoiceSpeechEngine, out speechEngine) ? speechEngine : VoiceSpeechEngine.Whisper;
+            Voice.ListeningClick = s.VoiceListeningClick;
             Voice.SetWakeWord(s.VoiceWakePhrase);
             Voice.SetMicrophonePreference(s.VoiceInputDeviceId, s.VoiceInputDeviceName);
         }
@@ -594,6 +597,8 @@ namespace KinectV2MouseControl
             s.VoiceWakeSensitivity = Voice.WakeSensitivity;
             s.VoiceCommandThreshold = Voice.CommandThreshold;
             s.VoiceDismissSound = Voice.DismissSound;
+            s.VoiceSpeechEngine = Voice.SpeechEngine.ToString();
+            s.VoiceListeningClick = Voice.ListeningClick;
             s.VoiceWakePhrase = Voice.WakeWord;
             s.VoiceInputDeviceId = Voice.PreferredMicrophoneId;
             s.VoiceInputDeviceName = Voice.PreferredMicrophoneName;

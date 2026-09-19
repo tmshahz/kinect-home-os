@@ -24,6 +24,9 @@ namespace KinectV2MouseControl
         Hidden,
         Wake,
         Listening,
+        Recording,
+        Transcribing,
+        Thinking,
         Executed,
         Rejected
     }
@@ -142,6 +145,12 @@ namespace KinectV2MouseControl
             voice.PhaseChanged += (s, e) => PostCurrent(() => OnPhaseChanged(e));
             voice.CommandRecognized += (s, e) => PostCurrent(() => OnCommandRecognized(e));
             voice.Stopped += (s, e) => PostCurrent(() => OnStopped(e));
+            voice.WhisperUnavailable += (s, e) => PostCurrent(() =>
+            {
+                whisperFailed = true;
+                SpeechEngineNotice = "Whisper unavailable: " + e + " Using Windows speech recognition.";
+                RequestReinitialize("Whisper fallback");
+            });
             voice.DecisionMade += (s, e) => dispatcher.BeginInvoke(new Action(() => OnDecision(e)));
 
             backendText = WakeGatedVoiceEngine.DescribeAvailability();
@@ -486,6 +495,8 @@ namespace KinectV2MouseControl
 
         private void StartListening()
         {
+            whisperFailed = false;
+            SpeechEngineNotice = "";
             NewGeneration();
             string error;
             if (!StartEngine(out error))
@@ -509,6 +520,8 @@ namespace KinectV2MouseControl
         /// </summary>
         private bool StartEngine(out string error)
         {
+            voice.SpeechEngine = whisperFailed ? VoiceSpeechEngine.Windows : speechEngine;
+            voice.ListeningClickEnabled = listeningClick;
             voice.WakeThreshold = WakeThresholdFor(wakeSensitivity);
             voice.CommandThreshold = commandThreshold;
             voice.DismissSoundEnabled = dismissSound;
@@ -546,6 +559,7 @@ namespace KinectV2MouseControl
                 retryTimer.Stop();
                 ErrorText = "";
                 BackendText = voice.BackendName;
+                if (voice.FallbackNotice.Length > 0) { SpeechEngineNotice = voice.FallbackNotice; }
                 IsListening = isEnabled;
                 uiTimer.Start();
                 if (unavailableReported)
@@ -560,6 +574,31 @@ namespace KinectV2MouseControl
         }
 
         // ---- Sensitivity -----------------------------------------------------------------------
+
+        private VoiceSpeechEngine speechEngine = VoiceSpeechEngine.Whisper;
+        private bool whisperFailed;
+        private bool listeningClick = true;
+        private string speechEngineNotice = "";
+        public Array SpeechEngines { get { return Enum.GetValues(typeof(VoiceSpeechEngine)); } }
+        public VoiceSpeechEngine SpeechEngine
+        {
+            get { return speechEngine; }
+            set
+            {
+                if (Set(ref speechEngine, value))
+                {
+                    whisperFailed = false;
+                    SpeechEngineNotice = "";
+                    RequestReinitialize("speech engine changed");
+                }
+            }
+        }
+        public bool ListeningClick
+        {
+            get { return listeningClick; }
+            set { if (Set(ref listeningClick, value)) { voice.ListeningClickEnabled = value; } }
+        }
+        public string SpeechEngineNotice { get { return speechEngineNotice; } private set { Set(ref speechEngineNotice, value); } }
 
         // Wake Sensitivity (0-100, shown to the user) maps onto the recognizer's confidence floor
         // for the wake word. Higher sensitivity = lower floor = easier to wake. It moves ONLY the
@@ -1484,8 +1523,15 @@ namespace KinectV2MouseControl
                         }
                     }
 
-                    ShowHud(VoiceHudState.Listening, "Listening…", "Say a command");
+                    ShowHud(VoiceHudState.Listening, "Listening… speak now", "Say one request");
                     UpdateCountdown();
+                    break;
+
+                case VoicePhase.Recording:
+                    ShowHud(VoiceHudState.Recording, "Hearing you…", "Pause when finished");
+                    break;
+                case VoicePhase.Transcribing:
+                    ShowHud(VoiceHudState.Transcribing, "Understanding…", "Transcribing locally");
                     break;
 
                 case VoicePhase.WakeOnly:
@@ -1511,6 +1557,7 @@ namespace KinectV2MouseControl
 
         private void OnCommandRecognized(VoiceCommandEventArgs e)
         {
+            if (!voice.IsCurrent(e)) { return; }
             // Switched off between recognition and now: do nothing.
             if (!isEnabled || reinitPending || e.Session == null || e.Intent == null)
             {
@@ -1544,6 +1591,12 @@ namespace KinectV2MouseControl
             }
 
             VoiceIntent intent = e.Intent;
+            if (intent.Kind == VoiceIntentKind.Request)
+            {
+                LastCommandText = "“" + e.Phrase + "”";
+                ShowOutcome(VoiceOutcome.NotRecognized, "Not a command: “" + e.Phrase + "”");
+                return;
+            }
             bool done = false;
             string feedback = intent.Feedback;
             string failure = null;
@@ -1564,7 +1617,15 @@ namespace KinectV2MouseControl
             }
 
             LastCommandText = "“" + e.Phrase + "”";
-            LastCommandDetail = feedback + " · confidence " + F2(e.Confidence) + (done ? "" : " · " + (failure ?? "failed"));
+            LastCommandDetail = feedback + (double.IsNaN(e.Confidence) ? " · local Whisper" : " · confidence " + F2(e.Confidence))
+                + (done ? "" : " · " + (failure ?? "failed"));
+            if (e.Session.TranscriptUtc != default(DateTime))
+            {
+                string timing = "Whisper transcript → action " + (DateTime.UtcNow - e.Session.TranscriptUtc).TotalMilliseconds.ToString("0", CultureInfo.InvariantCulture)
+                    + " ms; speech end → action " + (DateTime.UtcNow - e.Session.SpeechEndUtc).TotalMilliseconds.ToString("0", CultureInfo.InvariantCulture) + " ms";
+                RuntimeLog.Write(timing);
+                LastCommandDetail += " · " + timing;
+            }
             RuntimeLog.Write("Voice command #" + e.Session.Id + " '" + e.Phrase + "' -> " + feedback
                 + (done ? "" : " (FAILED" + (failure != null ? ": " + failure : "") + ")") + " (confidence " + F2(e.Confidence) + ")");
 
@@ -1968,7 +2029,8 @@ namespace KinectV2MouseControl
         private void SetPhase(VoicePhase value)
         {
             Phase = value;
-            IsCommandWindowOpen = value == VoicePhase.Acknowledging || value == VoicePhase.Listening;
+            IsCommandWindowOpen = value == VoicePhase.Acknowledging || value == VoicePhase.Listening
+                || value == VoicePhase.Recording || value == VoicePhase.Transcribing;
             IsAwaitingCommand = value == VoicePhase.Listening;
             if (!IsAwaitingCommand)
             {
@@ -2029,6 +2091,13 @@ namespace KinectV2MouseControl
                     PhaseTitle = "LISTENING…";
                     PhaseDetail = "Say one command";
                     StatusText = "Listening for a command";
+                    break;
+                case VoiceHudState.Recording:
+                case VoiceHudState.Transcribing:
+                case VoiceHudState.Thinking:
+                    PhaseTitle = text.ToUpperInvariant();
+                    PhaseDetail = state == VoiceHudState.Recording ? "Speak now" : state == VoiceHudState.Transcribing ? "Local speech" : "One moment";
+                    StatusText = text;
                     break;
             }
         }
@@ -2194,6 +2263,18 @@ namespace KinectV2MouseControl
             IsListening = true;
             switch (state)
             {
+                case VoiceHudState.Recording:
+                    SetPhase(VoicePhase.Recording);
+                    ShowHud(state, "Hearing you…", "Speak your request");
+                    break;
+                case VoiceHudState.Transcribing:
+                    SetPhase(VoicePhase.Transcribing);
+                    ShowHud(state, "Understanding…", "Transcribing locally");
+                    break;
+                case VoiceHudState.Thinking:
+                    SetPhase(VoicePhase.WakeOnly);
+                    ShowHud(state, "Thinking…", "“Put ChatGPT on screen two”");
+                    break;
                 case VoiceHudState.Listening:
                     SetPhase(VoicePhase.Listening);
                     ShowHud(VoiceHudState.Listening, "Listening…", "Say a command");

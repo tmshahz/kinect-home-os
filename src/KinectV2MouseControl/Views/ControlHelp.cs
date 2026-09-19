@@ -84,6 +84,8 @@ namespace KinectV2MouseControl
 
         public static readonly List<HelpEntry> Entries = new List<HelpEntry>
         {
+            new HelpEntry("Speech engine", "Whisper transcribes one request locally after the chime. Pause to finish. Windows uses the original command grammar and is the automatic fallback if Whisper is unavailable.", null, null, null, null),
+            new HelpEntry("End of listening sound", "A short click confirms that recording has finished and your request is being transcribed.", null, null, null, null),
             new HelpEntry("Movement scale",
                 "How far the cursor moves per centimetre of hand movement, in the normal (uncalibrated) mapping. Ignored while Calibrated range is on.",
                 "less arm movement needed to cross the desktop, but aiming gets twitchier.",
