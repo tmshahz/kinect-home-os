@@ -339,6 +339,7 @@ namespace KinectV2MouseControl
 
             if (overlay != null)
             {
+                System.Windows.Controls.Border chat = overlay.FindName("ChatPanel") as System.Windows.Controls.Border;
                 UIElement widget = overlay.Content as UIElement;
                 if (widget != null)
                 {
@@ -350,6 +351,29 @@ namespace KinectV2MouseControl
                     RenderElement(widget, shell, Path.Combine(directory, "overlay-voice-listening.png"), 460, 150, true);
                     shell.Voice.PreviewHud(VoiceHudState.Hidden);
                     RenderElement(widget, shell, Path.Combine(directory, "overlay-widget.png"), 460, 150, true);
+
+                    // Chat-panel Height is animated by a trigger, which cannot run offscreen;
+                    // OverlayChatOpen's Setter still opens it, and we pin Height the same way
+                    // as the help drawer so the capture is not left at 0.
+                    shell.OverlayChatOpen = true;
+                    shell.Assistant.RequestText = "Put ChatGPT on screen two";
+                    shell.Assistant.Steps.Add("Preview · request received");
+                    shell.Assistant.Steps.Add("Preview · ✓ Searched YouTube for lo-fi study music · 920 ms");
+                    if (chat != null)
+                    {
+                        chat.BeginAnimation(FrameworkElement.HeightProperty, null);
+                        chat.Height = 280;
+                    }
+
+                    RenderElement(widget, shell, Path.Combine(directory, "overlay-chat-open.png"), 460, 460, true);
+                    shell.OverlayChatOpen = false;
+                    if (chat != null)
+                    {
+                        chat.Height = 0;
+                    }
+
+                    shell.Assistant.Steps.Clear();
+                    shell.Assistant.RequestText = "";
                 }
             }
         }

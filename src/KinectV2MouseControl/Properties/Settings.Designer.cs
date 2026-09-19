@@ -374,6 +374,18 @@ namespace KinectV2MouseControl.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool OverlayChatOpen {
+            get {
+                return ((bool)(this["OverlayChatOpen"]));
+            }
+            set {
+                this["OverlayChatOpen"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
         public bool VoiceEnabled {
             get {
                 return ((bool)(this["VoiceEnabled"]));

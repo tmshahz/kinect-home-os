@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text;
 using System.Threading;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace KinectV2MouseControl
@@ -197,6 +198,7 @@ namespace KinectV2MouseControl
             };
 
             ToggleCommand = new RelayCommand(() => IsEnabled = !IsEnabled);
+            StartRequestCommand = new RelayCommand(StartManualRequest, CanStartManualRequest);
             RefreshMicrophonesCommand = new RelayCommand(() =>
             {
                 suspectId = null;
@@ -238,6 +240,7 @@ namespace KinectV2MouseControl
         }
 
         public RelayCommand ToggleCommand { get; private set; }
+        public RelayCommand StartRequestCommand { get; private set; }
         public RelayCommand RefreshMicrophonesCommand { get; private set; }
         public RelayCommand ClearDiagnosticsCommand { get; private set; }
         public RelayCommand TestWakeCommand { get; private set; }
@@ -458,6 +461,7 @@ namespace KinectV2MouseControl
                 isEnabled = value;
                 Raise("IsEnabled");
                 Raise("EnabledText");
+                CommandManager.InvalidateRequerySuggested();
 
                 if (value)
                 {
@@ -492,6 +496,31 @@ namespace KinectV2MouseControl
             {
                 return isEnabled ? "On" : "Off";
             }
+        }
+
+        /// <summary>
+        /// Widget AI button: open the same command window as a spoken wake, without saying it.
+        /// Disabled while voice is off or a session is already open.
+        /// </summary>
+        private void StartManualRequest()
+        {
+            if (!CanStartManualRequest())
+            {
+                return;
+            }
+
+            if (!voice.BeginManualSession())
+            {
+                return;
+            }
+
+            RuntimeLog.Write("Voice session started (source button)");
+            ActivityLog.Post(ActivityKind.Voice, "Listening for a request", "Started from the widget button", "button");
+        }
+
+        private bool CanStartManualRequest()
+        {
+            return isEnabled && !IsCommandWindowOpen && phase == VoicePhase.WakeOnly;
         }
 
         private void StartListening()
@@ -2035,6 +2064,7 @@ namespace KinectV2MouseControl
             IsCommandWindowOpen = value == VoicePhase.Acknowledging || value == VoicePhase.Listening
                 || value == VoicePhase.Recording || value == VoicePhase.Transcribing;
             IsAwaitingCommand = value == VoicePhase.Listening;
+            CommandManager.InvalidateRequerySuggested();
             if (!IsAwaitingCommand)
             {
                 ListeningRemaining = 0;

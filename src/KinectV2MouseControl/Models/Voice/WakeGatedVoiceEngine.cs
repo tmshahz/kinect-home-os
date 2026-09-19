@@ -646,6 +646,58 @@ namespace KinectV2MouseControl
             return true;
         }
 
+        /// <summary>
+        /// Opens the same command window as an accepted wake, from a deliberate button press.
+        /// Skips the wake isolation checks. Does nothing unless the engine is waiting in
+        /// WakeOnly. Safe to call from the UI thread: the lock is held only to create the
+        /// session; the chime, gate, grammars and one-command authorization are the same path.
+        /// </summary>
+        public bool BeginManualSession()
+        {
+            SpeechRecognitionEngine engine;
+            lock (sync)
+            {
+                if (phase != VoicePhase.WakeOnly || recognizer == null)
+                {
+                    return false;
+                }
+
+                engine = recognizer;
+            }
+
+            TimeSpan wakeEnd = TimeSpan.Zero;
+            try
+            {
+                wakeEnd = CurrentAudioPosition(engine);
+            }
+            catch (Exception)
+            {
+                // Diagnostics only; OpenGate captures the real gate position after the chime.
+            }
+
+            Pending pending = new Pending();
+            lock (sync)
+            {
+                if (phase != VoicePhase.WakeOnly || recognizer == null)
+                {
+                    return false;
+                }
+
+                session = new VoiceSession(++sessionCounter, 1.0, wakeEnd);
+                phase = VoicePhase.Acknowledging;
+                counters.Wakes++;
+                pending.Decisions.Add(new VoiceDecision("wake", VoiceVerdict.Accepted, activeWakeWord, 1.0,
+                    double.NaN, double.NaN, double.NaN, "button", "manual request", session.Id));
+                pending.PhaseChange = new VoicePhaseEventArgs(VoicePhase.Acknowledging, session, VoiceOutcome.None, "button");
+                pending.Grammars = true;
+                pending.ChimeSession = session.Id;
+                RuntimeLog.Write("Voice wake #" + session.Id + " accepted (source button)");
+            }
+
+            Run(pending);
+            return true;
+        }
+
         public void Stop()
         {
             SpeechRecognitionEngine stopping;

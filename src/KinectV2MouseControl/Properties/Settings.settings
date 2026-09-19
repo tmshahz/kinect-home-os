@@ -89,6 +89,9 @@
     <Setting Name="OverlayTop" Type="System.Double" Scope="User">
       <Value Profile="(Default)">-1</Value>
     </Setting>
+    <Setting Name="OverlayChatOpen" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">False</Value>
+    </Setting>
     <Setting Name="VoiceEnabled" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
     </Setting>

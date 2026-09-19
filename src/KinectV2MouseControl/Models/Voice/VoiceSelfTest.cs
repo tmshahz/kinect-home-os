@@ -483,6 +483,7 @@ namespace KinectV2MouseControl
             public string WakeWord = Wake;
             public CustomPhraseSet Custom = StarterPhrases();
             public VoiceSpeechEngine SpeechEngine = VoiceSpeechEngine.Windows;
+            public double ManualSessionAt = -1;
 
             public Scenario Say(string words, string voice = David)
             {
@@ -561,6 +562,13 @@ namespace KinectV2MouseControl
 
             scenarios.Add(new Scenario { Name = "Command without wake: volume one hundred" }
                 .Wait(0.8).Say("volume one hundred").Wait(0.8).Say("mute"));
+
+            scenarios.Add(new Scenario
+            {
+                Name = "Manual session: button, volume forty, ignore mute",
+                ManualSessionAt = 0.8,
+                ExpectedCommands = new[] { "Volume → 40%" }
+            }.Wait(0.8).Wait(1.0).Say("volume forty").Wait(1.2).Say("mute"));
 
             scenarios.Add(new Scenario { Name = "Second command without another wake", ExpectedCommands = new[] { "Volume → 40%" } }
                 .Wait(0.8).Say(Wake).Wait(1.0).Say("volume forty").Wait(1.2).Say("mute"));
@@ -732,7 +740,10 @@ namespace KinectV2MouseControl
                 new Scenario { Name = "Whisper silence", SpeechEngine = VoiceSpeechEngine.Whisper, Tail = 7,
                     ExtraCheck = r => r.Outcomes.Contains(VoiceOutcome.TimedOut) && r.Transcriptions == 0 ? null : "silence did not time out without transcription" }.Wait(0.8).Say(Wake),
                 new Scenario { Name = "Whisper ignores pre-chime speech", SpeechEngine = VoiceSpeechEngine.Whisper, Tail = 7,
-                    ExpectedCommands = new[] { "Volume → 30%" } }.Wait(0.8).Say("mute").Wait(0.8).Say(Wake).Wait(1.2).Say("set the volume to thirty")
+                    ExpectedCommands = new[] { "Volume → 30%" } }.Wait(0.8).Say("mute").Wait(0.8).Say(Wake).Wait(1.2).Say("set the volume to thirty"),
+                new Scenario { Name = "Whisper manual session: button, volume thirty, ignore mute", SpeechEngine = VoiceSpeechEngine.Whisper, Tail = 7,
+                    ManualSessionAt = 0.8, ExpectedCommands = new[] { "Volume → 30%" } }
+                    .Wait(0.8).Wait(1.2).Say("set the volume to thirty").Wait(1.2).Say("mute")
             };
             foreach (Scenario scenario in scenarios)
             {
@@ -944,6 +955,22 @@ namespace KinectV2MouseControl
             {
                 result.Error = "engine did not start: " + error;
                 return result;
+            }
+
+            if (scenario.ManualSessionAt >= 0)
+            {
+                double at = scenario.ManualSessionAt;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    Thread.Sleep(TimeSpan.FromSeconds(at));
+                    if (!engine.BeginManualSession())
+                    {
+                        lock (gate)
+                        {
+                            result.Error = "manual session did not open";
+                        }
+                    }
+                });
             }
 
             finished.WaitOne(TimeSpan.FromSeconds(result.AudioSeconds + 15));

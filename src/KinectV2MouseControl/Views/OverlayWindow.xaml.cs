@@ -1,15 +1,22 @@
 using System;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace KinectV2MouseControl
 {
     /// <summary>
     /// The compact, always-available face of KINECT-OS: a floating pill that shows whether
-    /// control is live, what the hands are doing and the last thing that happened. Shown when
-    /// the control center is hidden. Drag it anywhere; double-click or the expand button
-    /// brings the full window back. It never takes focus, so it cannot steal keystrokes from
-    /// whatever the user is working in.
+    /// control is live, what the hands are doing and the last thing that happened, plus an
+    /// optional slide-down chat panel. Shown when the control center is hidden. Drag the pill
+    /// anywhere; double-click or the expand button brings the full window back.
+    ///
+    /// The window is created with ShowActivated=false so it does not steal keystrokes from the
+    /// user's work. While the chat panel is open, a click into the request box calls Activate
+    /// so typing can reach the TextBox; the rest of the widget still does not grab focus on its
+    /// own.
     /// </summary>
     public partial class OverlayWindow : Window
     {
@@ -22,6 +29,21 @@ namespace KinectV2MouseControl
             this.shell = shell;
             DataContext = shell;
             InitializeComponent();
+
+            HelpBinding.Attach(AskButton, "Ask KINECT-OS");
+            HelpBinding.Attach(ChatToggle, "Widget chat panel");
+            HelpBinding.Attach(ChatPanel, "Widget chat panel");
+            HelpBinding.Attach(ChatRequestBox, "Manual request");
+
+            shell.Assistant.PropertyChanged += Assistant_PropertyChanged;
+            shell.Assistant.Steps.CollectionChanged += Steps_CollectionChanged;
+            Closed += OverlayWindow_Closed;
+        }
+
+        private void OverlayWindow_Closed(object sender, EventArgs e)
+        {
+            shell.Assistant.PropertyChanged -= Assistant_PropertyChanged;
+            shell.Assistant.Steps.CollectionChanged -= Steps_CollectionChanged;
         }
 
         /// <summary>
@@ -100,6 +122,63 @@ namespace KinectV2MouseControl
         private void Power_Click(object sender, RoutedEventArgs e)
         {
             shell.Engine.IsControlEnabled = !shell.Engine.IsControlEnabled;
+        }
+
+        private void ChatToggle_Click(object sender, RoutedEventArgs e)
+        {
+            shell.OverlayChatOpen = !shell.OverlayChatOpen;
+            if (shell.OverlayChatOpen)
+            {
+                ScrollChatToEnd();
+            }
+        }
+
+        /// <summary>
+        /// The widget is shown with ShowActivated=false. A click in the request box is the
+        /// user asking to type, so the window must become the active window or the caret
+        /// never appears.
+        /// </summary>
+        private void ChatRequestBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!IsActive)
+            {
+                Activate();
+            }
+
+            ChatRequestBox.Focus();
+        }
+
+        private void ChatRequestBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            if (!IsActive)
+            {
+                Activate();
+            }
+        }
+
+        private void Assistant_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == "IsBusy" && shell.Assistant.IsBusy)
+            {
+                shell.OverlayChatOpen = true;
+                ScrollChatToEnd();
+            }
+        }
+
+        private void Steps_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
+        {
+            ScrollChatToEnd();
+        }
+
+        private void ScrollChatToEnd()
+        {
+            if (ChatStepsScroll == null)
+            {
+                return;
+            }
+
+            ChatStepsScroll.Dispatcher.BeginInvoke(new Action(() => ChatStepsScroll.ScrollToEnd()),
+                DispatcherPriority.Loaded);
         }
 
         private void RequestExpand()

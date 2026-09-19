@@ -1143,8 +1143,10 @@ The DeepSeek assistant built on these actions is §4.18.
     enabled together, and no grammar ever contains both the wake word and a command: a wake
     word may not be a command phrase and a custom phrase may not contain the wake word.
     Whisper mode loads only the wake grammar and disables it during recording/transcription.
-29. **One command per wake**, only from a phrase whose speech began after the chime gate, and
-    only via `CommandRecognized` → `VoiceViewModel` (session `TryAuthorize` + `TryMarkExecuted`).
+29. **One command per session.** A session starts from an accepted wake or an explicit user
+    button press; everything after that (gate, one command, generations) is identical. Only a
+    phrase whose speech began after the chime gate is accepted, and only via
+    `CommandRecognized` → `VoiceViewModel` (session `TryAuthorize` + `TryMarkExecuted`).
     Whisper transcribes only post-gate PCM; results must match session and input generation.
 30. **Deterministic voice parsing:** exact built-in phrases, exact custom phrases (by match
     key) and the strict volume pattern only; no substring/fuzzy matching; a custom phrase may

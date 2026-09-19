@@ -42,15 +42,54 @@
         </Style>
 
         <Style x:Key="HandChip" TargetType="Border">
-            <Setter Property="Width" Value="26"/>
-            <Setter Property="Height" Value="26"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="CornerRadius" Value="8"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Margin" Value="3,0,0,0"/>
+            <Setter Property="Margin" Value="2,0,0,0"/>
+        </Style>
+
+        <!-- Height 0 when closed. A Setter (not only an animation) so the offscreen smoke test
+             can render the panel open: storyboards do not run there. -->
+        <Style x:Key="ChatPanelStyle" TargetType="Border">
+            <Setter Property="Height" Value="0"/>
+            <Setter Property="ClipToBounds" Value="True"/>
+            <Setter Property="Background" Value="#E00C1524"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Brush.SurfaceBorder}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Margin" Value="0,8,0,0"/>
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding OverlayChatOpen}" Value="True">
+                    <Setter Property="Height" Value="280"/>
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Height" To="280" Duration="0:0:0.22">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseOut"/>
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Height" To="0" Duration="0:0:0.18">
+                                    <DoubleAnimation.EasingFunction>
+                                        <CubicEase EasingMode="EaseIn"/>
+                                    </DoubleAnimation.EasingFunction>
+                                </DoubleAnimation>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
     </Window.Resources>
 
-    <Grid Margin="16" MaxWidth="428">
+    <StackPanel Margin="16" MaxWidth="428">
         <Border CornerRadius="20" Background="#EC0C1524"
                 BorderThickness="1" Effect="{StaticResource Effect.WidgetShadow}"
                 MouseLeftButtonDown="Border_MouseLeftButtonDown" Cursor="SizeAll">
@@ -74,7 +113,7 @@
                 </Grid.ColumnDefinitions>
 
                 <!-- Status orb. The live ring's scale and opacity follow MicLevel; colour follows the HUD. -->
-                <Grid Width="30" Height="30" Margin="0,0,12,0" VerticalAlignment="Center">
+                <Grid Width="30" Height="30" Margin="0,0,8,0" VerticalAlignment="Center">
                     <Ellipse Width="30" Height="30" Fill="Transparent" StrokeThickness="2"
                              Stroke="{Binding Voice.HudState, Converter={StaticResource VoiceBrush}}"
                              Opacity="{Binding Voice.MicLevel}"
@@ -105,7 +144,7 @@
                 </Grid>
 
                 <!-- Text: control status normally, the voice cycle while one is on screen -->
-                <Grid Grid.Column="1" VerticalAlignment="Center" MinWidth="150" MaxWidth="220">
+                <Grid Grid.Column="1" VerticalAlignment="Center" MinWidth="120" MaxWidth="200">
                     <StackPanel Visibility="{Binding Voice.HudVisible, Converter={StaticResource Vis}, ConverterParameter=invert}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="KINECT-OS" FontSize="9.5" FontWeight="Bold" Foreground="{StaticResource Brush.Accent}" VerticalAlignment="Center"/>
@@ -164,7 +203,7 @@
                 </Grid>
 
                 <!-- Hands + voice -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,6,0">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="6,0,4,0">
                     <Border Style="{StaticResource HandChip}" ToolTip="Left hand: in zone / fist = clutch"
                             Background="{Binding Status.LeftHandInZone, Converter={StaticResource OnSoftBrush}}"
                             BorderBrush="{Binding Status.IsClutchArmed, Converter={StaticResource OnBorderBrush}}">
@@ -186,19 +225,75 @@
                     </Border>
                 </StackPanel>
 
-                <!-- Buttons -->
+                <!-- Chevron, AI, power, expand -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Style="{StaticResource Button.Icon}" Width="30" Height="30" Click="Power_Click"
+                    <Button x:Name="ChatToggle" Style="{StaticResource Button.Icon}" Width="28" Height="28" Click="ChatToggle_Click"
+                            ToolTip="Show or hide the chat panel">
+                        <Grid>
+                            <local:IconView Icon="{StaticResource IconChevronDown}" Size="13"
+                                            Visibility="{Binding OverlayChatOpen, Converter={StaticResource Vis}, ConverterParameter=invert}"/>
+                            <local:IconView Icon="{StaticResource IconChevronUp}" Size="13"
+                                            Visibility="{Binding OverlayChatOpen, Converter={StaticResource BoolToVis}}"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="AskButton" Style="{StaticResource Button.Icon}" Width="28" Height="28" Margin="3,0,0,0"
+                            Command="{Binding Voice.StartRequestCommand}"
+                            ToolTip="Ask KINECT-OS (no wake word needed)">
+                        <local:IconView Icon="{StaticResource IconAi}" Size="13"/>
+                    </Button>
+                    <Button Style="{StaticResource Button.Icon}" Width="28" Height="28" Margin="3,0,0,0" Click="Power_Click"
                             ToolTip="Switch Kinect control on / off"
                             Foreground="{Binding Status.IsControlEnabled, Converter={StaticResource GoodBrush}}">
-                        <local:IconView Icon="{StaticResource IconPower}" Size="14"/>
+                        <local:IconView Icon="{StaticResource IconPower}" Size="13"/>
                     </Button>
-                    <Button Style="{StaticResource Button.Icon}" Width="30" Height="30" Margin="4,0,0,0" Click="Expand_Click"
+                    <Button Style="{StaticResource Button.Icon}" Width="28" Height="28" Margin="3,0,0,0" Click="Expand_Click"
                             ToolTip="Open the control center">
-                        <local:IconView Icon="{StaticResource IconExpand}" Size="14"/>
+                        <local:IconView Icon="{StaticResource IconExpand}" Size="13"/>
                     </Button>
                 </StackPanel>
             </Grid>
         </Border>
-    </Grid>
+
+        <Border x:Name="ChatPanel" Style="{StaticResource ChatPanelStyle}">
+            <Grid x:Name="ChatPanelContent" Margin="12,10,12,12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <ScrollViewer x:Name="ChatStepsScroll" MaxHeight="220" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Assistant.Steps}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" FontSize="11" Foreground="{StaticResource Brush.TextMuted}"
+                                           FontFamily="{StaticResource Font.Text}" TextWrapping="Wrap" Margin="0,2"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <TextBlock Grid.Row="1" Text="{Binding Assistant.Status}" FontSize="11"
+                           Foreground="{StaticResource Brush.Accent}" TextTrimming="CharacterEllipsis"
+                           Margin="0,8,0,8"/>
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="ChatRequestBox" Style="{StaticResource TextBox.Field}"
+                             Text="{Binding Assistant.RequestText, UpdateSourceTrigger=PropertyChanged}"
+                             MaxLength="4000" AcceptsReturn="False"
+                             PreviewMouseLeftButtonDown="ChatRequestBox_PreviewMouseLeftButtonDown"
+                             GotKeyboardFocus="ChatRequestBox_GotKeyboardFocus">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Return" Command="{Binding Assistant.SubmitCommand}"/>
+                        </TextBox.InputBindings>
+                    </TextBox>
+                    <Button x:Name="ChatCancelButton" Grid.Column="1" Content="Cancel" Style="{StaticResource Button.Ghost}"
+                            Command="{Binding Assistant.CancelCommand}" Margin="8,0,0,0" Padding="12,6"
+                            Visibility="{Binding Assistant.IsBusy, Converter={StaticResource BoolToVis}}"/>
+                </Grid>
+            </Grid>
+        </Border>
+    </StackPanel>
 </Window>

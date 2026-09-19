@@ -369,6 +369,23 @@ namespace KinectV2MouseControl
         public double OverlayLeft { get; set; }
         public double OverlayTop { get; set; }
 
+        private bool overlayChatOpen;
+
+        /// <summary>
+        /// The compact widget's slide-down chat panel is showing. Remembered as a UI setting.
+        /// </summary>
+        public bool OverlayChatOpen
+        {
+            get
+            {
+                return overlayChatOpen;
+            }
+            set
+            {
+                Set(ref overlayChatOpen, value);
+            }
+        }
+
         // ---- Help drawer --------------------------------------------------------------------------
 
         public RelayCommand ToggleHelpCommand { get; private set; }
@@ -563,6 +580,7 @@ namespace KinectV2MouseControl
             overlayAlwaysOnTop = s.OverlayAlwaysOnTop;
             OverlayLeft = s.OverlayLeft;
             OverlayTop = s.OverlayTop;
+            overlayChatOpen = s.OverlayChatOpen;
             // Wake Sensitivity is a 0-100 scale. A value at or below 1 is a legacy 0-1 fraction
             // (an earlier default), so scale it up rather than reading it as ~1%.
             double sensitivity = s.VoiceWakeSensitivity;
@@ -598,6 +616,7 @@ namespace KinectV2MouseControl
             s.OverlayAlwaysOnTop = overlayAlwaysOnTop;
             s.OverlayLeft = OverlayLeft;
             s.OverlayTop = OverlayTop;
+            s.OverlayChatOpen = overlayChatOpen;
             s.VoiceEnabled = Voice.IsEnabled;
             s.VoiceWakeSensitivity = Voice.WakeSensitivity;
             s.VoiceCommandThreshold = Voice.CommandThreshold;
