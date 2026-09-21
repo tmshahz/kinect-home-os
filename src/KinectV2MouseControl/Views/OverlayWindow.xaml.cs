@@ -3,6 +3,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace KinectV2MouseControl
@@ -21,6 +22,14 @@ namespace KinectV2MouseControl
     public partial class OverlayWindow : Window
     {
         private readonly ShellViewModel shell;
+
+        /// <summary>
+        /// How long the answer card stays up after the final answer, unless the user has the
+        /// panel open by hand. One place so the dwell cannot drift.
+        /// </summary>
+        private const double AnswerCardDwellSeconds = 6;
+
+        private DispatcherTimer answerDwell;
 
         public event EventHandler ExpandRequested;
 
@@ -44,6 +53,7 @@ namespace KinectV2MouseControl
         {
             shell.Assistant.PropertyChanged -= Assistant_PropertyChanged;
             shell.Assistant.Steps.CollectionChanged -= Steps_CollectionChanged;
+            StopAnswerDwell();
         }
 
         /// <summary>
@@ -126,10 +136,29 @@ namespace KinectV2MouseControl
 
         private void ChatToggle_Click(object sender, RoutedEventArgs e)
         {
+            // A press while the card is up on its own pins the panel as the user's choice.
+            // It does not close it; the next press is an ordinary toggle.
+            if (shell.WidgetAnswerTransient && !shell.OverlayChatOpen)
+            {
+                PinChatPanelOpen();
+                ScrollChatToEnd();
+                return;
+            }
+
+            StopAnswerDwell();
+            shell.WidgetAnswerTransient = false;
             shell.OverlayChatOpen = !shell.OverlayChatOpen;
             if (shell.OverlayChatOpen)
             {
                 ScrollChatToEnd();
+            }
+        }
+
+        private void ChatPanel_MouseEnter(object sender, MouseEventArgs e)
+        {
+            if (shell.WidgetAnswerTransient && !shell.OverlayChatOpen)
+            {
+                PinChatPanelOpen();
             }
         }
 
@@ -140,6 +169,11 @@ namespace KinectV2MouseControl
         /// </summary>
         private void ChatRequestBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            if (shell.WidgetAnswerTransient && !shell.OverlayChatOpen)
+            {
+                PinChatPanelOpen();
+            }
+
             if (!IsActive)
             {
                 Activate();
@@ -150,6 +184,11 @@ namespace KinectV2MouseControl
 
         private void ChatRequestBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
         {
+            if (shell.WidgetAnswerTransient && !shell.OverlayChatOpen)
+            {
+                PinChatPanelOpen();
+            }
+
             if (!IsActive)
             {
                 Activate();
@@ -158,11 +197,159 @@ namespace KinectV2MouseControl
 
         private void Assistant_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == "IsBusy" && shell.Assistant.IsBusy)
+            if (e.PropertyName == "IsBusy")
+            {
+                if (shell.Assistant.IsBusy)
+                {
+                    OnAssistantBecameBusy();
+                }
+                else
+                {
+                    OnAssistantBecameIdle();
+                }
+            }
+            else if (e.PropertyName == "Status")
+            {
+                ApplyStatusAsAnswer();
+            }
+        }
+
+        /// <summary>
+        /// An assistant request opens the panel. A panel the user already opened is left
+        /// alone: no dwell, and OverlayChatOpen is not rewritten.
+        /// </summary>
+        private void OnAssistantBecameBusy()
+        {
+            string request = FindRequestLine();
+            if (request.Length == 0)
+            {
+                return;
+            }
+
+            shell.WidgetAnswerRequest = request;
+            shell.WidgetAnswerText = "Thinking…";
+            ScrollChatToEnd();
+
+            if (shell.OverlayChatOpen)
+            {
+                StopAnswerDwell();
+                return;
+            }
+
+            shell.WidgetAnswerTransient = true;
+            StopAnswerDwell();
+        }
+
+        /// <summary>
+        /// The final answer is already in the status line. Dwell starts here, and only for
+        /// a card the user did not pin open.
+        /// </summary>
+        private void OnAssistantBecameIdle()
+        {
+            if (!shell.WidgetAnswerTransient && !shell.OverlayChatOpen)
+            {
+                return;
+            }
+
+            ApplyStatusAsAnswer();
+            if (shell.OverlayChatOpen || !shell.WidgetAnswerTransient)
+            {
+                StopAnswerDwell();
+                return;
+            }
+
+            StartAnswerDwell();
+        }
+
+        private void ApplyStatusAsAnswer()
+        {
+            if (!shell.WidgetAnswerTransient && !shell.OverlayChatOpen)
+            {
+                return;
+            }
+
+            string status = shell.Assistant.Status ?? "";
+            if (status.Length == 0 || status == "Thinking…")
+            {
+                return;
+            }
+
+            shell.WidgetAnswerText = status;
+        }
+
+        /// <summary>
+        /// Hover, the request box, or the chevron turns the automatic card into the user's
+        /// open panel. OverlayChatOpen is written here because they asked to keep it.
+        /// </summary>
+        private void PinChatPanelOpen()
+        {
+            StopAnswerDwell();
+            if (!shell.OverlayChatOpen)
             {
                 shell.OverlayChatOpen = true;
-                ScrollChatToEnd();
             }
+
+            shell.WidgetAnswerTransient = false;
+        }
+
+        private void StartAnswerDwell()
+        {
+            if (answerDwell == null)
+            {
+                answerDwell = new DispatcherTimer();
+                answerDwell.Interval = TimeSpan.FromSeconds(AnswerCardDwellSeconds);
+                answerDwell.Tick += AnswerDwell_Tick;
+            }
+
+            answerDwell.Stop();
+            answerDwell.Start();
+        }
+
+        private void StopAnswerDwell()
+        {
+            if (answerDwell != null)
+            {
+                answerDwell.Stop();
+            }
+        }
+
+        private void AnswerDwell_Tick(object sender, EventArgs e)
+        {
+            StopAnswerDwell();
+            if (shell.OverlayChatOpen)
+            {
+                return;
+            }
+
+            shell.WidgetAnswerTransient = false;
+        }
+
+        /// <summary>
+        /// SubmitAsync records the user's words as a step ("Request: …") before it goes busy.
+        /// Key tests and other non-request work do not, and must not pop the card.
+        /// </summary>
+        private string FindRequestLine()
+        {
+            const string marker = "Request:";
+            for (int i = shell.Assistant.Steps.Count - 1; i >= 0; i--)
+            {
+                string step = shell.Assistant.Steps[i] ?? "";
+                int at = step.IndexOf(marker, StringComparison.Ordinal);
+                if (at < 0)
+                {
+                    continue;
+                }
+
+                string body = step.Substring(at + marker.Length).Trim();
+                if (body.Length >= 2 && body[0] == '\u201C' && body[body.Length - 1] == '\u201D')
+                {
+                    body = body.Substring(1, body.Length - 2).Trim();
+                }
+
+                return body;
+            }
+
+            return "";
         }
 
         private void Steps_CollectionChanged(object sender, NotifyCollectionChangedEventArgs e)
@@ -188,6 +375,96 @@ namespace KinectV2MouseControl
             {
                 handler.Invoke(this, EventArgs.Empty);
             }
+        }
+    }
+
+    /// <summary>
+    /// Slides <see cref="FrameworkElement.Width"/> or <see cref="FrameworkElement.Height"/>
+    /// between two concrete numbers. The clock is started only while the element is on a
+    /// shown window. A style storyboard does not work here: offscreen, including the smoke
+    /// test, the clock sits at time zero and a From of 0 holds the panel shut, so the
+    /// Setter never shows through. From and To are both set so a resize that re-enters the
+    /// clock (SizeToContent, every tick) cannot throw on an unresolved origin.
+    /// </summary>
+    public static class PanelSlide
+    {
+        public static readonly DependencyProperty ToHeightProperty = DependencyProperty.RegisterAttached(
+            "ToHeight", typeof(double), typeof(PanelSlide), new PropertyMetadata(0.0, OnToHeightChanged));
+
+        public static readonly DependencyProperty ToWidthProperty = DependencyProperty.RegisterAttached(
+            "ToWidth", typeof(double), typeof(PanelSlide), new PropertyMetadata(0.0, OnToWidthChanged));
+
+        public static void SetToHeight(DependencyObject element, double value)
+        {
+            element.SetValue(ToHeightProperty, value);
+        }
+
+        public static double GetToHeight(DependencyObject element)
+        {
+            return (double)element.GetValue(ToHeightProperty);
+        }
+
+        public static void SetToWidth(DependencyObject element, double value)
+        {
+            element.SetValue(ToWidthProperty, value);
+        }
+
+        public static double GetToWidth(DependencyObject element)
+        {
+            return (double)element.GetValue(ToWidthProperty);
+        }
+
+        private static void OnToHeightChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            Slide(d as FrameworkElement, FrameworkElement.HeightProperty, e);
+        }
+
+        private static void OnToWidthChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            Slide(d as FrameworkElement, FrameworkElement.WidthProperty, e);
+        }
+
+        private static void Slide(FrameworkElement element, DependencyProperty property, DependencyPropertyChangedEventArgs e)
+        {
+            if (element == null)
+            {
+                return;
+            }
+
+            double to = e.NewValue is double ? (double)e.NewValue : 0;
+            if (double.IsNaN(to))
+            {
+                to = 0;
+            }
+
+            // Not shown: leave the style Setter as the value. That is what the smoke test renders.
+            if (!element.IsVisible)
+            {
+                element.BeginAnimation(property, null);
+                return;
+            }
+
+            double from = property == FrameworkElement.HeightProperty ? element.ActualHeight : element.ActualWidth;
+            if (from < 0.5 && e.OldValue is double && !double.IsNaN((double)e.OldValue))
+            {
+                from = (double)e.OldValue;
+            }
+
+            if (Math.Abs(from - to) < 0.5)
+            {
+                element.BeginAnimation(property, null);
+                return;
+            }
+
+            bool opening = to > from;
+            DoubleAnimation animation = new DoubleAnimation();
+            animation.From = from;
+            animation.To = to;
+            animation.Duration = TimeSpan.FromMilliseconds(opening ? 220 : 180);
+            animation.EasingFunction = new CubicEase { EasingMode = opening ? EasingMode.EaseOut : EasingMode.EaseIn };
+            // Stop, so the style Setter (280 / 340 open, 0 closed) holds the resting value.
+            animation.FillBehavior = FillBehavior.Stop;
+            element.BeginAnimation(property, animation);
         }
     }
 }

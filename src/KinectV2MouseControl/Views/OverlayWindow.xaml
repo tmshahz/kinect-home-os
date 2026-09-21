@@ -49,8 +49,12 @@
             <Setter Property="Margin" Value="2,0,0,0"/>
         </Style>
 
-        <!-- Height 0 when closed. A Setter (not only an animation) so the offscreen smoke test
-             can render the panel open: storyboards do not run there. -->
+        <!-- Height 0 when closed, 280 when open. The Setter is what the offscreen smoke test
+             renders. The slide itself is PanelSlide, and only while the window is shown:
+             a style storyboard's From sticks at 0 offscreen and hides this panel. PanelSlide
+             always passes both From and To, because this window is SizeToContent and a
+             To-only height animation is sampled again inside HwndTarget.OnResize with no
+             resolvable origin (the Release collapse crash). -->
         <Style x:Key="ChatPanelStyle" TargetType="Border">
             <Setter Property="Height" Value="0"/>
             <Setter Property="ClipToBounds" Value="True"/>
@@ -60,30 +64,9 @@
             <Setter Property="CornerRadius" Value="16"/>
             <Setter Property="Margin" Value="0,8,0,0"/>
             <Style.Triggers>
-                <DataTrigger Binding="{Binding OverlayChatOpen}" Value="True">
+                <DataTrigger Binding="{Binding IsWidgetPanelOpen}" Value="True">
                     <Setter Property="Height" Value="280"/>
-                    <DataTrigger.EnterActions>
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Height" To="280" Duration="0:0:0.22">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseOut"/>
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </DataTrigger.EnterActions>
-                    <DataTrigger.ExitActions>
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Height" To="0" Duration="0:0:0.18">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseIn"/>
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </DataTrigger.ExitActions>
+                    <Setter Property="local:PanelSlide.ToHeight" Value="280"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -231,9 +214,9 @@
                             ToolTip="Show or hide the chat panel">
                         <Grid>
                             <local:IconView Icon="{StaticResource IconChevronDown}" Size="13"
-                                            Visibility="{Binding OverlayChatOpen, Converter={StaticResource Vis}, ConverterParameter=invert}"/>
+                                            Visibility="{Binding IsWidgetPanelOpen, Converter={StaticResource Vis}, ConverterParameter=invert}"/>
                             <local:IconView Icon="{StaticResource IconChevronUp}" Size="13"
-                                            Visibility="{Binding OverlayChatOpen, Converter={StaticResource BoolToVis}}"/>
+                                            Visibility="{Binding IsWidgetPanelOpen, Converter={StaticResource BoolToVis}}"/>
                         </Grid>
                     </Button>
                     <Button x:Name="AskButton" Style="{StaticResource Button.Icon}" Width="28" Height="28" Margin="3,0,0,0"
@@ -254,14 +237,25 @@
             </Grid>
         </Border>
 
-        <Border x:Name="ChatPanel" Style="{StaticResource ChatPanelStyle}">
+        <Border x:Name="ChatPanel" Style="{StaticResource ChatPanelStyle}" MouseEnter="ChatPanel_MouseEnter">
             <Grid x:Name="ChatPanelContent" Margin="12,10,12,12">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <ScrollViewer x:Name="ChatStepsScroll" MaxHeight="220" VerticalScrollBarVisibility="Auto"
+                <!-- The answer is the point of an automatic open: wrapping body text, tall enough
+                     for two or three lines, not the single-line HUD ellipsis. -->
+                <StackPanel Grid.Row="0">
+                    <TextBlock Text="{Binding WidgetAnswerRequest}" Style="{StaticResource Text.Caption}"
+                               TextWrapping="Wrap" LineHeight="18" MaxHeight="40" Margin="0,0,0,6"
+                               Visibility="{Binding WidgetAnswerRequest, Converter={StaticResource Vis}}"/>
+                    <TextBlock Text="{Binding WidgetAnswerText}" Style="{StaticResource Text.Body}"
+                               TextWrapping="Wrap" LineHeight="20" MaxHeight="80" Margin="0,0,0,8"
+                               Visibility="{Binding WidgetAnswerText, Converter={StaticResource Vis}}"/>
+                </StackPanel>
+                <ScrollViewer x:Name="ChatStepsScroll" Grid.Row="1" MaxHeight="140" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled">
                     <ItemsControl ItemsSource="{Binding Assistant.Steps}">
                         <ItemsControl.ItemTemplate>
@@ -272,10 +266,11 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
-                <TextBlock Grid.Row="1" Text="{Binding Assistant.Status}" FontSize="11"
+                <TextBlock Grid.Row="2" Text="{Binding Assistant.Status}" FontSize="11"
                            Foreground="{StaticResource Brush.Accent}" TextTrimming="CharacterEllipsis"
-                           Margin="0,8,0,8"/>
-                <Grid Grid.Row="2">
+                           Margin="0,8,0,8"
+                           Visibility="{Binding WidgetAnswerText, Converter={StaticResource Vis}, ConverterParameter=invert}"/>
+                <Grid Grid.Row="3">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>

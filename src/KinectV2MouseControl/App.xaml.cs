@@ -359,6 +359,8 @@ namespace KinectV2MouseControl
                     // as the help drawer so the capture is not left at 0.
                     shell.OverlayChatOpen = true;
                     shell.Assistant.RequestText = "Put ChatGPT on screen two";
+                    shell.WidgetAnswerRequest = "Put ChatGPT on the top right of my second screen and leave everything else where it is";
+                    shell.WidgetAnswerText = "ChatGPT is on the top right of screen 2. The window sits inside that monitor's work area, clear of the taskbar, and the other screen was left as it was.";
                     shell.Assistant.Steps.Add("Preview · request received");
                     shell.Assistant.Steps.Add("Preview · ✓ Searched YouTube for lo-fi study music · 920 ms");
                     if (chat != null)
@@ -368,6 +370,20 @@ namespace KinectV2MouseControl
                     }
 
                     RenderElement(widget, shell, Path.Combine(directory, "overlay-chat-open.png"), 460, 460, true);
+
+                    // The answer card uses the same panel, opened without the remembered chevron.
+                    shell.OverlayChatOpen = false;
+                    shell.WidgetAnswerTransient = true;
+                    if (chat != null)
+                    {
+                        chat.BeginAnimation(FrameworkElement.HeightProperty, null);
+                        chat.Height = 280;
+                    }
+
+                    RenderElement(widget, shell, Path.Combine(directory, "overlay-answer-card.png"), 460, 460, true);
+                    shell.WidgetAnswerTransient = false;
+                    shell.WidgetAnswerRequest = "";
+                    shell.WidgetAnswerText = "";
                     shell.OverlayChatOpen = false;
                     if (chat != null)
                     {
@@ -423,6 +439,57 @@ namespace KinectV2MouseControl
         {
             RuntimeLog.Write("UNHANDLED (UI thread): " + e.Exception);
             ReleaseMouse("unhandled exception");
+
+            // Settings are written only on the normal quit path. Leaving a recoverable UI
+            // failure unhandled killed the process and silently discarded the user's tuning.
+            // This is a net under the animation fix, not a substitute for it.
+            if (!IsRecoverableUiException(e.Exception))
+            {
+                return;
+            }
+
+            ActivityLog.Post(ActivityKind.System, "Recovered from an error", DescribeException(e.Exception), "app",
+                "ui-exception", 2);
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// UI-thread failures such as an animation sampled mid-resize can be survived.
+        /// Corrupted-process exceptions stay fatal so the runtime still tears the process down.
+        /// </summary>
+        private static bool IsRecoverableUiException(Exception exception)
+        {
+            for (Exception current = exception; current != null; current = current.InnerException)
+            {
+                if (current is OutOfMemoryException
+                    || current is StackOverflowException
+                    || current is AccessViolationException
+                    || current is AppDomainUnloadedException
+                    || current is BadImageFormatException
+                    || current is CannotUnloadAppDomainException
+                    || current is System.Runtime.InteropServices.SEHException)
+                {
+                    return false;
+                }
+            }
+
+            return exception != null;
+        }
+
+        private static string DescribeException(Exception exception)
+        {
+            if (exception == null)
+            {
+                return "Unknown error";
+            }
+
+            string text = exception.GetType().Name + ": " + exception.Message;
+            if (text.Length > 240)
+            {
+                text = text.Substring(0, 240);
+            }
+
+            return text;
         }
 
         private void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)

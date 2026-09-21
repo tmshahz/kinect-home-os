@@ -372,7 +372,8 @@ namespace KinectV2MouseControl
         private bool overlayChatOpen;
 
         /// <summary>
-        /// The compact widget's slide-down chat panel is showing. Remembered as a UI setting.
+        /// The user opened the compact widget's chat panel with the chevron. This is the only
+        /// panel flag that is saved. An automatic answer card must never write it.
         /// </summary>
         public bool OverlayChatOpen
         {
@@ -382,7 +383,72 @@ namespace KinectV2MouseControl
             }
             set
             {
-                Set(ref overlayChatOpen, value);
+                if (Set(ref overlayChatOpen, value))
+                {
+                    Raise("IsWidgetPanelOpen");
+                }
+            }
+        }
+
+        private bool widgetAnswerTransient;
+
+        /// <summary>
+        /// The chat panel was opened on its own to show an assistant answer. Not a UI setting,
+        /// and never copied into <see cref="OverlayChatOpen"/>.
+        /// </summary>
+        public bool WidgetAnswerTransient
+        {
+            get
+            {
+                return widgetAnswerTransient;
+            }
+            set
+            {
+                if (Set(ref widgetAnswerTransient, value))
+                {
+                    Raise("IsWidgetPanelOpen");
+                }
+            }
+        }
+
+        /// <summary>
+        /// The slide-down panel is on screen: the chevron is open, or an answer card is up.
+        /// </summary>
+        public bool IsWidgetPanelOpen
+        {
+            get
+            {
+                return overlayChatOpen || widgetAnswerTransient;
+            }
+        }
+
+        private string widgetAnswerRequest = "";
+
+        /// <summary>The user's line on the widget answer card. Not persisted.</summary>
+        public string WidgetAnswerRequest
+        {
+            get
+            {
+                return widgetAnswerRequest;
+            }
+            set
+            {
+                Set(ref widgetAnswerRequest, value ?? "");
+            }
+        }
+
+        private string widgetAnswerText = "";
+
+        /// <summary>The assistant's reply on the widget answer card. Not persisted.</summary>
+        public string WidgetAnswerText
+        {
+            get
+            {
+                return widgetAnswerText;
+            }
+            set
+            {
+                Set(ref widgetAnswerText, value ?? "");
             }
         }
 
