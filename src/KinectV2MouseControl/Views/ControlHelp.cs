@@ -342,6 +342,10 @@ namespace KinectV2MouseControl
 
             new HelpEntry("Keep the widget above other windows",
                 "On: the compact widget floats over everything so the status is always visible. Off: it behaves like an ordinary window and can be covered.",
+                null, null, null, null),
+
+            new HelpEntry("Reload the last profile",
+                "On: the tuning profile you last loaded or saved is applied again at startup, after your saved settings and before the control mode opens the sensor. Off: startup uses the saved settings only. An empty or unreadable slot is skipped and those saved settings stay. This choice is not stored inside a profile.",
                 null, null, null, null)
         };
 

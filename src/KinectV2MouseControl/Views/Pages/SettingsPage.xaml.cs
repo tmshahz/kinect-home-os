@@ -10,6 +10,7 @@ namespace KinectV2MouseControl
             HelpBinding.Attach(CompactOnMinimizeCheck, "Minimize to the floating widget");
             HelpBinding.Attach(StartCompactCheck, "Start in compact mode");
             HelpBinding.Attach(OverlayTopCheck, "Keep the widget above other windows");
+            HelpBinding.Attach(ReloadLastProfileCheck, "Reload the last profile");
         }
     }
 }
