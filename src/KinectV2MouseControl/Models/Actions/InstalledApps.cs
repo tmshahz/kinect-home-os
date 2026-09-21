@@ -70,12 +70,71 @@ namespace KinectV2MouseControl
             }
             catch (Exception) { /* Start Menu entries remain usable when the shell catalog is unavailable. */ }
             finally { Release(items); Release(apps); Release(shell); }
-            cache = entries.GroupBy(e => Normalize(e.Name)).Select(g => g.First()).ToList();
+            cache = ResolveDuplicateNames(entries);
             cachedAt = DateTime.UtcNow;
             return cache;
         }
 
         private static string Normalize(string name) { return Regex.Replace((name ?? "").ToLowerInvariant(), "[^a-z0-9]", ""); }
+
+        /// <summary>
+        /// Keeps real same-named applications ambiguous, but suppresses browser PWA shortcuts
+        /// when Windows also exposes a desktop or packaged application with that name.
+        /// </summary>
+        internal static List<Entry> ResolveDuplicateNames(IEnumerable<Entry> entries)
+        {
+            return entries.GroupBy(e => Normalize(e.Name)).SelectMany(group =>
+            {
+                List<Entry> realApps = group.Where(e => !IsBrowserPwaShortcut(e)).ToList();
+                IEnumerable<Entry> preferred;
+                if (realApps.Count > 0) { preferred = realApps; }
+                else { preferred = group; }
+                return preferred.GroupBy(e => (e.Packaged ? "package:" : "shortcut:") + (e.Target ?? ""), StringComparer.OrdinalIgnoreCase)
+                    .Select(duplicates => duplicates.First());
+            }).OrderBy(e => Normalize(e.Name), StringComparer.Ordinal).ThenBy(EntryPriority)
+                .ThenBy(e => e.Target ?? "", StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        /// <summary>
+        /// Browser PWA shortcuts live in a recognizable Start Menu folder. This is deliberately
+        /// a heuristic: the shortcut target is opaque here, so folder location is safer than
+        /// resolving and trusting arbitrary .lnk contents.
+        /// </summary>
+        private static bool IsBrowserPwaShortcut(Entry entry)
+        {
+            if (entry == null || entry.Packaged || string.IsNullOrEmpty(entry.Target)) { return false; }
+            string path = entry.Target.Replace('/', '\\');
+            return path.IndexOf("\\Chrome Apps\\", StringComparison.OrdinalIgnoreCase) >= 0
+                || path.IndexOf("\\Edge Apps\\", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static int EntryPriority(Entry entry)
+        {
+            if (IsBrowserPwaShortcut(entry)) { return 2; }
+            return entry.Packaged ? 0 : 1;
+        }
+
+        /// <summary>Returns a stable, names-only subset suitable for remote assistant context.</summary>
+        internal static string[] Names(IEnumerable<Entry> entries, int maximumNames, int maximumCharacters, out bool truncated)
+        {
+            List<string> names = entries.Select(e => e.Name).Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList();
+            List<string> result = new List<string>();
+            int characters = 0;
+            foreach (string name in names)
+            {
+                if (result.Count >= maximumNames || characters + name.Length > maximumCharacters)
+                { truncated = true; return result.ToArray(); }
+                result.Add(name);
+                characters += name.Length;
+            }
+            truncated = false;
+            return result.ToArray();
+        }
+
+        internal static string[] Names(int maximumNames, int maximumCharacters, out bool truncated)
+        { return Names(Index(), maximumNames, maximumCharacters, out truncated); }
+
         internal static List<Entry> Match(string name, IEnumerable<Entry> entries)
         {
             string key = Normalize(name);

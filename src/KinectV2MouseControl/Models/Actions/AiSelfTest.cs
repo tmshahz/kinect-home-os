@@ -48,6 +48,24 @@ namespace KinectV2MouseControl
                 InstalledApps.Entry[] apps = { new InstalledApps.Entry { Name = "Microsoft Edge" }, new InstalledApps.Entry { Name = "Edge Beta" }, new InstalledApps.Entry { Name = "Claude" } };
                 check(InstalledApps.Match("edge", apps).Count == 2 && InstalledApps.Match("Claude", apps).Single().Name == "Claude"
                     && InstalledApps.Match("Claud", apps).Single().Name == "Claude", "app ambiguity, exact and fuzzy matching");
+                InstalledApps.Entry[] pwaAndDesktop = {
+                    new InstalledApps.Entry { Name = "Claude", Target = @"C:\Users\test\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Chrome Apps\Claude.lnk" },
+                    new InstalledApps.Entry { Name = "Claude", Target = "Claude_pzs8sxrjxfjjc!Claude", Packaged = true }
+                };
+                check(InstalledApps.ResolveDuplicateNames(pwaAndDesktop).Count == 1 && InstalledApps.ResolveDuplicateNames(pwaAndDesktop).Single().Packaged,
+                    "app index prefers packaged app over Chrome PWA shortcut");
+                InstalledApps.Entry[] distinctSameNameApps = {
+                    new InstalledApps.Entry { Name = "Claude", Target = @"C:\Programs\Claude.lnk" },
+                    new InstalledApps.Entry { Name = "Claude", Target = "Claude_pzs8sxrjxfjjc!Claude", Packaged = true }
+                };
+                check(InstalledApps.Match("Claude", InstalledApps.ResolveDuplicateNames(distinctSameNameApps)).Count == 2,
+                    "app index preserves genuine same-name ambiguity");
+                bool appNamesPartial;
+                string[] appNames = InstalledApps.Names(new[] {
+                    new InstalledApps.Entry { Name = "zeta" }, new InstalledApps.Entry { Name = "Alpha" }, new InstalledApps.Entry { Name = "alpha" }, new InstalledApps.Entry { Name = "Beta" }
+                }, 2, 10, out appNamesPartial);
+                check(appNames.SequenceEqual(new[] { "Alpha", "Beta" }) && appNamesPartial,
+                    "assistant app names are stable, deduplicated and bounded");
                 TestFiles(check);
                 TestFileRanking(check);
             }
