@@ -529,11 +529,23 @@ A `HandStateFilter` configured from `GestureTuning`:
   `LastCommandText` on its own line. The AI button (`Voice.StartRequestCommand`) opens the
   same command window as a spoken wake (`WakeGatedVoiceEngine.BeginManualSession`); it is
   disabled while voice is off or a session is already open. A chevron toggles a slide-down
-  chat panel in the same window (`OverlayChatOpen`, remembered). The panel shows
-  `Assistant.Steps` (newest at the bottom, max height ~220 px), `Assistant.Status`, a one-line
-  request box (`Assistant.SubmitCommand` on Enter) and Cancel while busy. It opens on its own
-  when `Assistant.IsBusy` becomes true. A click in the request box calls `Activate()` so
-  typing works; the widget does not activate until then.
+  chat panel in the same window. `OverlayChatOpen` is only the remembered chevron state.
+  An assistant request also opens that panel without writing the setting: it shows the
+  request and the answer (wrapping body text, room for two or three lines) and closes
+  about 6 seconds after the answer (`AnswerCardDwellSeconds`). Hovering the panel, focusing
+  or clicking the request box, or pressing the chevron pins it (`OverlayChatOpen` becomes
+  true) and the dwell does not run; a panel the user already opened is never auto-closed.
+  Steps stay listed for a manual open. A one-line request box (`Assistant.SubmitCommand` on
+  Enter) and Cancel while busy are unchanged. A click in the request box calls `Activate()`
+  so typing works; the widget is created `ShowActivated=false` and does not take focus until
+  then. The panel height slide is `PanelSlide`: both `From` and `To`, and only while the
+  window is shown. The window is `SizeToContent="WidthAndHeight"`, so the animation resizes
+  the HWND every tick and the clock is sampled again inside `HwndTarget.OnResize`. A To-only
+  `DoubleAnimation` has no resolvable origin there and throws — that Release crash also
+  skipped the normal quit path, so the user's tuning was never saved. A style storyboard
+  cannot carry the `From`, because offscreen its clock sits at time zero and holds the panel
+  shut; the style `Setter` (280 open) is what the smoke test renders. The help drawer uses
+  the same slide.
 - **Tray:** created on `Loaded`, disposed on `Closed`; Open / Compact / toggle control / Quit.
 - **Quit path:** window Close → `ShellViewModel.Quit()` → voice off, UI settings saved,
   `Engine.Quit()` (SaveSettings, Mode = Disabled via the setter, log). The X button quits;
@@ -788,9 +800,11 @@ looser, Wake Sensitivity moves the floor 0.60-0.90; the isolation gate never mov
   `Voice.StartRequestCommand`) opens the same window as an accepted wake — session, chime,
   gate, one command — and does nothing unless the phase is WakeOnly. Source is logged as
   "button".
-- **Widget chat:** `OverlayWindow` hosts the step log and a one-line request box in the same
-  window as the pill. `OverlayChatOpen` is a UI setting. The panel opens when the assistant
-  becomes busy.
+- **Widget chat:** `OverlayWindow` hosts the answer, the step log and a one-line request box
+  in the same window as the pill. `OverlayChatOpen` records only the user's chevron. An
+  assistant request opens the panel on its own (request line + wrapping answer) and closes it
+  about 6 seconds after the reply, without writing that setting. Hover, the request box or
+  the chevron pins it open; a panel already opened by hand is never auto-closed.
 - **Model:** `DeepSeekClient` posts OpenAI-style `chat/completions` to the fixed origin
   `https://api.deepseek.com` (TLS 1.2, redirects off, 20 s timeout), non-streaming, with
   `thinking: {"type":"disabled"}` (verified against api-docs.deepseek.com during the build).
@@ -1092,8 +1106,12 @@ The DeepSeek assistant built on these actions is §4.18.
 ## 10. Known gaps / observations
 
 - A hard kill (Task Manager "End task" on the process tree / power loss) can still skip every
-  handler. Unhandled exceptions, Windows session end and ProcessExit release the button via
-  `MouseControl.ReleaseIfInjected()`.
+  handler. Unhandled exceptions on a non-UI thread, Windows session end and ProcessExit release
+  the button via `MouseControl.ReleaseIfInjected()`. A recoverable UI-thread exception is logged,
+  the injected button is released, an activity entry is posted, and the exception is marked
+  handled so the process stays up. Settings are saved only on the normal quit path, so the old
+  unhandled animation crash discarded the user's tuning. Out-of-memory, access violations and
+  similar corrupted-state exceptions are still left unhandled.
 - `CursorOutputLoop.Dispose()` is never called; Stop via Mode = Disabled is what runs.
 - The log does not record per-frame data. Use Settings → Advanced diagnostics for live values.
 - The acrylic backdrop needs Windows 11 22H2+; older builds get the opaque gradient. The

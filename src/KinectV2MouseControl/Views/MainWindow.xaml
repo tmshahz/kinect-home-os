@@ -52,34 +52,17 @@
             <Setter Property="Padding" Value="10,5"/>
         </Style>
 
-        <!-- The help drawer slides its width between 0 and 340. -->
+        <!-- Width 0 when closed, 340 when open. The Setter is what the offscreen smoke test
+             renders. PanelSlide animates only on a shown window, and always with both From
+             and To: a To-only DoubleAnimation throws if it is sampled during a resize
+             before its origin can be read. -->
         <Style x:Key="HelpDrawerStyle" TargetType="Border">
             <Setter Property="Width" Value="0"/>
             <Setter Property="ClipToBounds" Value="True"/>
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsHelpOpen}" Value="True">
-                    <DataTrigger.EnterActions>
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Width" To="340" Duration="0:0:0.22">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseOut"/>
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </DataTrigger.EnterActions>
-                    <DataTrigger.ExitActions>
-                        <BeginStoryboard>
-                            <Storyboard>
-                                <DoubleAnimation Storyboard.TargetProperty="Width" To="0" Duration="0:0:0.18">
-                                    <DoubleAnimation.EasingFunction>
-                                        <CubicEase EasingMode="EaseIn"/>
-                                    </DoubleAnimation.EasingFunction>
-                                </DoubleAnimation>
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </DataTrigger.ExitActions>
+                    <Setter Property="Width" Value="340"/>
+                    <Setter Property="local:PanelSlide.ToWidth" Value="340"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
