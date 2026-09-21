@@ -35,7 +35,14 @@ namespace KinectV2MouseControl
         /// Hysteresis band. Once engaged, the hand has to fall this much below a threshold
         /// before disengaging, so hovering near the edge does not flicker in and out.
         /// </summary>
-        public double ActivationReleaseMargin { get; set; } = 0.08;
+        public double ActivationReleaseMargin { get; set; } = 0.12;
+
+        /// <summary>
+        /// Seconds an active pointer session remains alive after the right hand leaves the
+        /// activation zone. The cursor target is held and all grips are released during this
+        /// window, so a brief boundary crossing does not force a new stabilization and snap.
+        /// </summary>
+        public double PointerReleaseGrace { get; set; } = 0.35;
 
         // ---- Lasso -> right click ---------------------------------------------------------
 

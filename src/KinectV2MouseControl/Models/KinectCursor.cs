@@ -835,6 +835,14 @@ namespace KinectV2MouseControl
         private double sessionDeltaMax;
 
         /// <summary>
+        /// A short hold before tearing down an otherwise healthy active session when the right
+        /// hand crosses the activation boundary. This is intentionally not a stabilizer state:
+        /// every forced teardown still resets the stabilizer immediately.
+        /// </summary>
+        private bool isPointerReleaseGraceActive;
+        private double pointerReleaseGraceElapsed;
+
+        /// <summary>
         /// Timer for hover detection.
         /// </summary>
         private DispatcherTimer hoverTimer = new DispatcherTimer();
@@ -1008,7 +1016,8 @@ namespace KinectV2MouseControl
             UpdatePointerHand(body, deltaTime);
             UpdateSecondaryHandClicking(body, deltaTime);
 
-            ToggleHoverTimer(Mode == ControlMode.HoverToClick && usedHandIndex != NONE_USED);
+            ToggleHoverTimer(Mode == ControlMode.HoverToClick && usedHandIndex != NONE_USED
+                && !isPointerReleaseGraceActive);
 
             // The pointer session state is only known once the pointer path has run, so the
             // gesture layer is driven here, after it.
@@ -1027,10 +1036,25 @@ namespace KinectV2MouseControl
 
             if (!hand.IsActivated)
             {
-                // Right hand down or gone: pointer control goes idle. There is no fallback to
-                // the left hand.
-                if (usedHandIndex != NONE_USED)
+                // An active session may briefly hold its last target after the right hand
+                // crosses the release boundary. The hand is not trustworthy out of the zone,
+                // so no targets or gestures are published and every button comes up at once.
+                if (usedHandIndex != NONE_USED && stabilizer.State == PointerSessionState.Active)
                 {
+                    if (!isPointerReleaseGraceActive)
+                    {
+                        isPointerReleaseGraceActive = true;
+                        pointerReleaseGraceElapsed = 0;
+                        RuntimeLog.Write("Pointer session held: right hand left the zone");
+                        ReleaseAllGrips();
+                    }
+
+                    pointerReleaseGraceElapsed += deltaTime;
+                    if (pointerReleaseGraceElapsed < tuning.PointerReleaseGrace)
+                    {
+                        return;
+                    }
+
                     EndPointerSession("right hand left the zone");
                 }
                 else
@@ -1043,6 +1067,16 @@ namespace KinectV2MouseControl
             }
 
             MVector2 handPos = body.GetHandRelativePosition(false, tuning.PointerCenterHeight);
+            double resumedGraceElapsed = 0;
+
+            if (isPointerReleaseGraceActive)
+            {
+                resumedGraceElapsed = pointerReleaseGraceElapsed;
+                isPointerReleaseGraceActive = false;
+                pointerReleaseGraceElapsed = 0;
+                RuntimeLog.Write("Pointer session resumed after release grace ("
+                    + resumedGraceElapsed.ToString("0.00") + " s)");
+            }
 
             if (usedHandIndex == NONE_USED)
             {
@@ -1064,7 +1098,8 @@ namespace KinectV2MouseControl
                 DoMouseControlByHandState(PointerHand, hand, deltaTime);
             }
 
-            PointerStabilizer.Verdict verdict = stabilizer.CheckActiveSample(handPos, deltaTime + skippedPointerTime);
+            PointerStabilizer.Verdict verdict = stabilizer.CheckActiveSample(handPos,
+                deltaTime + skippedPointerTime + resumedGraceElapsed);
             if (verdict == PointerStabilizer.Verdict.Destabilize)
             {
                 EndPointerSession("repeated tracking glitches");
@@ -1074,7 +1109,7 @@ namespace KinectV2MouseControl
             if (verdict == PointerStabilizer.Verdict.SkipGlitch)
             {
                 // One implausible jump: hold the previous target rather than filtering it in.
-                skippedPointerTime += deltaTime;
+                skippedPointerTime += deltaTime + resumedGraceElapsed;
                 return;
             }
 
@@ -1112,7 +1147,7 @@ namespace KinectV2MouseControl
         private void UpdateSecondaryHandClicking(Body body, double deltaTime)
         {
             HandSnapshot hand = gestureContext.Hands[SecondaryHand];
-            bool isPointerLive = usedHandIndex != NONE_USED;
+            bool isPointerLive = usedHandIndex != NONE_USED && !isPointerReleaseGraceActive;
 
             if (Mode == ControlMode.MoveGripPressing && isPointerLive && hand.IsActivated)
             {
@@ -1131,7 +1166,10 @@ namespace KinectV2MouseControl
 
         private void RunGestureLayer()
         {
-            gestureContext.ControllingHandIndex = usedHandIndex;
+            // The session's cursor target is held during release grace, but it is not a live
+            // gesture session: stale clutch neutral or lasso state must not survive the gap.
+            gestureContext.ControllingHandIndex = isPointerReleaseGraceActive
+                ? GestureContext.NoHand : usedHandIndex;
             gestureContext.IsDragActive = IsAnyGripHeld();
             gestureContext.IsGestureVocabularyEnabled = IsGestureVocabularyEnabled();
             gestureContext.IsControlEnabled = controlEnabled && !calibration.IsCapturing;
@@ -1367,6 +1405,8 @@ namespace KinectV2MouseControl
         /// </summary>
         private void BeginControlSession(MVector2 seedPosition)
         {
+            isPointerReleaseGraceActive = false;
+            pointerReleaseGraceElapsed = 0;
             ReleaseAllGrips();
             cursorMapper.ResetSmoothing();
             handStateFilters[0].Reset();
@@ -1403,6 +1443,8 @@ namespace KinectV2MouseControl
         /// </summary>
         private void EndControlSession()
         {
+            isPointerReleaseGraceActive = false;
+            pointerReleaseGraceElapsed = 0;
             ReleaseAllGrips();
             cursorMapper.ResetSmoothing();
             handStateFilters[0].Reset();
@@ -1454,6 +1496,8 @@ namespace KinectV2MouseControl
         private void ResetControlState()
         {
             usedHandIndex = NONE_USED;
+            isPointerReleaseGraceActive = false;
+            pointerReleaseGraceElapsed = 0;
             hasFrameArrived = false;
             cursorMapper.ResetSmoothing();
             handStateFilters[0].Reset();

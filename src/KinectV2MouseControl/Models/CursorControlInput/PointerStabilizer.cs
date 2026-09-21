@@ -15,14 +15,15 @@ namespace KinectV2MouseControl
         Stabilizing,
 
         /// <summary>
-        /// Pointer session live: the right hand drives the cursor.
+        /// Pointer session live: the right hand normally drives the cursor. KinectCursor may
+        /// briefly hold its last target before tearing this session down at the release boundary.
         /// </summary>
         Active
     }
 
     /// <summary>
     /// Deterministic start-up for every pointer session - first acquisition, and every
-    /// reacquisition after tracking loss, a stall, a reset or the hand leaving the zone.
+    /// reacquisition after tracking loss, a stall, a reset or a release-grace expiry.
     ///
     /// The raw first samples of a session are the least trustworthy the sensor produces: the
     /// arm is still rising, joints flip between Tracked and Inferred, and a freshly acquired

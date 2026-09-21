@@ -301,6 +301,10 @@ src/KinectV2MouseControl/
     and the skipped time carries into the next filter step;
   - more than `PointerMaxGlitchFrames` (3) glitches in a row ends the session and it
     re-stabilizes.
+- **Release grace**: once an Active session has crossed the activation release boundary, it
+  holds its last target for `PointerReleaseGrace` (0.35 s). No target or gesture is published
+  during that hold, and every grip releases immediately. Returning fully inside the activation
+  zone resumes the same session without re-seeding or stabilizing; expiry tears it down normally.
 - Every teardown path resets the stabilizer to Waiting, so reacquisition always re-stabilizes.
 
 ### 4.5 Pointer filtering chain (in order, Active sessions only)
@@ -413,7 +417,9 @@ A `HandStateFilter` configured from `GestureTuning`:
 
 - **Geometry:** all gesture geometry is metres relative to SpineBase.
 - **Activation:** `Height ≥ ActivationMinHeight` and `ForwardDistance ≥ ForwardActivationDistance`.
-  Release is 0.08 m below either threshold.
+  Release is 0.12 m below either threshold. An Active session then holds its last cursor target
+  for up to `PointerReleaseGrace` (0.35 s), with grips and gesture activity released, before it
+  tears down.
 - **Pointer frame:** body-relative position, X ±0.185 m per hand, Y − `PointerCenterHeight`.
 - **Uncalibrated mapping:**
   - InputRect `(-0.18, 1.65, 0.18, -1.65)`, `ScaleAlignment.LongerRange`, × `MoveScale`;
@@ -958,9 +964,11 @@ Code defaults (`Settings.settings`/`App.config`; ViewModel `DEFAULT_*` for the D
 | JitterDeadzone | 3 |
 | ClickFreeze | 0.15 |
 | PointerSettleTime | 0.25 |
+| PointerReleaseGrace | 0.35 |
 | PointerCenterHeight | 0.5 |
 | ForwardActivation | 0.15 |
 | ActivationMinHeight | 0.25 |
+| ActivationReleaseMargin | 0.12 |
 | ScrollSpeed | 60 |
 | ScrollCurve | 1.5 |
 | InvertScroll | false |
