@@ -11,6 +11,8 @@ namespace KinectV2MouseControl
 {
     public sealed class AssistantViewModel : ObservableObject
     {
+        private const int AssistantAppNameLimit = 60;
+        private const int AssistantAppCharacterLimit = 2400;
         private readonly KinectCursorViewModel engine;
         private readonly VoiceViewModel voice;
         private readonly Dispatcher dispatcher;
@@ -120,9 +122,12 @@ namespace KinectV2MouseControl
                             AddStep(safe); voice.ShowAssistantThinking(safe);
                         }));
                         Status = "Thinking…"; voice.ShowAssistantThinking("“" + text + "”");
+                        bool installedAppsPartial;
+                        string[] installedApps = InstalledApps.Names(AssistantAppNameLimit, AssistantAppCharacterLimit, out installedAppsPartial);
                         string context = AssistantJson.Write(new { monitors = DesktopWindows.Monitors().Select((m, i) => new { number = i + 1, left = m.Left, top = m.Top, right = m.Right, bottom = m.Bottom }),
                             foreground_app = ForegroundApp.CurrentProcessName(), custom_phrases = voice.AssistantPhrases,
-                            builtin_action_ids = CustomCommandRules.AssignableActions().Select(a => a.Id).ToArray() });
+                            builtin_action_ids = CustomCommandRules.AssignableActions().Select(a => a.Id).ToArray(),
+                            installed_app_names = installedApps, installed_app_names_partial = installedAppsPartial });
                         string answer = await session.RunAsync(text, context, false, cancellation.Token);
                         if (stamp != generation) { return; }
                         Status = string.IsNullOrEmpty(key) ? answer : answer.Replace(key, "[key hidden]");
