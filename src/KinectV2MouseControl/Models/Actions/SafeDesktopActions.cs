@@ -20,6 +20,7 @@ namespace KinectV2MouseControl
         public int Monitor { get; set; }
         public string Region { get; set; }
         public string Text { get; set; }
+        public string Uri { get; set; }
     }
 
     public sealed class DesktopActionResult
@@ -52,7 +53,10 @@ namespace KinectV2MouseControl
             ("cmd powershell pwsh WindowsTerminal conhost wt explorer regedit mmc Taskmgr KinectV2MouseControl KINECT-OS").Split(' '), StringComparer.OrdinalIgnoreCase);
 
         public static bool Handles(ControlActionType type)
-        { return type >= ControlActionType.LaunchAppByName && type <= ControlActionType.TypeText; }
+        {
+            return (type >= ControlActionType.LaunchAppByName && type <= ControlActionType.TypeText)
+                || type == ControlActionType.CloseWindowByName || type == ControlActionType.OpenDeepLink;
+        }
 
         public static bool CanOpenExtension(string path) { return Extensions.Contains(System.IO.Path.GetExtension(path)); }
         public static bool CanType(string process, string text)
@@ -87,6 +91,32 @@ namespace KinectV2MouseControl
             return browser == "edge" ? "microsoft-edge:" + uri.AbsoluteUri : uri.AbsoluteUri;
         }
 
+        /// <summary>
+        /// Only opens explicit, non-web app routes. Spotify search text is escaped here so a
+        /// model-provided title cannot introduce another URI component.
+        /// </summary>
+        public static string CheckedDeepLink(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length > 2048 || value.StartsWith(@"\\", StringComparison.Ordinal)
+                || value.IndexOfAny(new[] { '\0', '\r', '\n', '"' }) >= 0)
+            { throw new ArgumentException("Deep link must be a 1–2048 character spotify: or ms-settings: URI without quotes, line breaks, or a network path."); }
+
+            Uri uri;
+            if (!Uri.TryCreate(value, UriKind.Absolute, out uri)
+                || (uri.Scheme != "spotify" && uri.Scheme != "ms-settings") || !string.IsNullOrEmpty(uri.UserInfo))
+            { throw new ArgumentException("Only spotify: and ms-settings: deep links without embedded credentials can be opened."); }
+
+            const string SpotifySearch = "spotify:search:";
+            if (value.StartsWith(SpotifySearch, StringComparison.OrdinalIgnoreCase))
+            {
+                string query = value.Substring(SpotifySearch.Length);
+                if (string.IsNullOrWhiteSpace(query)) { throw new ArgumentException("Spotify search needs a song, artist, or album."); }
+                return SpotifySearch + Uri.EscapeDataString(query);
+            }
+
+            return uri.AbsoluteUri;
+        }
+
         public static DesktopActionResult Execute(ControlAction action, DesktopActionContext context)
         {
             DesktopActionRequest request = action.Request ?? new DesktopActionRequest();
@@ -102,6 +132,10 @@ namespace KinectV2MouseControl
                         string url = CheckedUrl(action.Type == ControlActionType.WebSearch ? WebUrl(request.Site, request.Query) : request.Url, request.Browser);
                         if (!context.DryRun) { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
                         return DesktopActionResult.Ok((context.DryRun ? "Would open " : "Opened ") + url);
+                    case ControlActionType.OpenDeepLink:
+                        string deepLink = CheckedDeepLink(request.Uri);
+                        if (!context.DryRun) { Process.Start(new ProcessStartInfo(deepLink) { UseShellExecute = true }); }
+                        return DesktopActionResult.Ok((context.DryRun ? "Would open " : "Opened ") + deepLink);
                     case ControlActionType.FindFiles:
                         bool partial;
                         string[] found = Find(request.Query, PersonalFolders(), context.Cancellation, out partial);
@@ -118,6 +152,8 @@ namespace KinectV2MouseControl
                         return DesktopActionResult.Ok("Visible windows", DesktopWindows.List().Select(w => new { process = w.Process, title = w.Title, monitor = w.Monitor }).ToArray());
                     case ControlActionType.PlaceWindow:
                         return DesktopWindows.Place(request, context.DryRun);
+                    case ControlActionType.CloseWindowByName:
+                        return DesktopWindows.Close(request, context.DryRun);
                     case ControlActionType.TypeText:
                         string foreground = ForegroundApp.CurrentProcessName();
                         if (!CanType(foreground, request.Text))

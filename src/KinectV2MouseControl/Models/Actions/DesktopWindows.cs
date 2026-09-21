@@ -36,6 +36,7 @@ namespace KinectV2MouseControl
         [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr window, int command);
         [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr window, out Rect rect);
         [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
+        [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
         [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr window, int attribute, out Rect rect, int size);
 
         internal static Rect[] Monitors()
@@ -93,15 +94,26 @@ namespace KinectV2MouseControl
             }
         }
 
+        /// <summary>
+        /// Resolve an exact process/title first, then a title substring. Named desktop actions
+        /// share this one matcher so ambiguity is always refused consistently.
+        /// </summary>
+        internal static List<Window> Match(IEnumerable<Window> windows, string target)
+        {
+            List<Window> all = windows.ToList();
+            List<Window> matches = all.Where(window => string.Equals(window.Process, target, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(window.Title, target, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (matches.Count == 0)
+            { matches = all.Where(window => window.Title.IndexOf(target, StringComparison.OrdinalIgnoreCase) >= 0).ToList(); }
+            return matches;
+        }
+
         public static DesktopActionResult Place(DesktopActionRequest request, bool dryRun)
         {
             Rect[] monitors = Monitors();
             if (request.Monitor < 1 || request.Monitor > monitors.Length) { return DesktopActionResult.Refused("Monitor must be 1–" + monitors.Length + " (left to right)."); }
             if (string.IsNullOrWhiteSpace(request.Window)) { return DesktopActionResult.Refused("Specify a window process name or title."); }
-            List<Window> all = List();
-            List<Window> matches = all.Where(w => string.Equals(w.Process, request.Window, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(w.Title, request.Window, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (matches.Count == 0) { matches = all.Where(w => w.Title.IndexOf(request.Window, StringComparison.OrdinalIgnoreCase) >= 0).ToList(); }
+            List<Window> matches = Match(List(), request.Window);
             if (matches.Count == 0) { return DesktopActionResult.Refused("No visible window matches “" + request.Window + "”."); }
             if (matches.Count != 1) { return DesktopActionResult.Refused("Several windows match. Use ListWindows and choose an exact title."); }
             Window window = matches[0];
@@ -120,6 +132,29 @@ namespace KinectV2MouseControl
                 if (request.Region == "maximize") { ShowWindow(window.Handle, 3); }
             }
             return DesktopActionResult.Ok((dryRun ? "Would place " : "Placed ") + window.Process + " on monitor " + request.Monitor + " " + request.Region);
+        }
+
+        public static DesktopActionResult Close(DesktopActionRequest request, bool dryRun)
+        {
+            return Close(request, dryRun, List());
+        }
+
+        /// <summary>
+        /// Requests a normal window close instead of ending a process, preserving an app's own
+        /// save prompts and chance to refuse. The overload keeps policy tests hardware-free.
+        /// </summary>
+        internal static DesktopActionResult Close(DesktopActionRequest request, bool dryRun, IEnumerable<Window> visibleWindows)
+        {
+            if (string.IsNullOrWhiteSpace(request.Window)) { return DesktopActionResult.Refused("Specify a visible window process name or title."); }
+            List<Window> matches = Match(visibleWindows, request.Window);
+            if (matches.Count == 0) { return DesktopActionResult.Refused("No visible window matches “" + request.Window + "”."); }
+            if (matches.Count != 1) { return DesktopActionResult.Refused("Several windows match. Use ListWindows and choose an exact title."); }
+            Window window = matches[0];
+            if (string.Equals(window.Process, Process.GetCurrentProcess().ProcessName, StringComparison.OrdinalIgnoreCase))
+            { return DesktopActionResult.Refused("KINECT-OS cannot close itself."); }
+            if (!dryRun && !PostMessage(window.Handle, 0x0010, IntPtr.Zero, IntPtr.Zero))
+            { return DesktopActionResult.Refused("Windows refused the close request."); }
+            return DesktopActionResult.Ok((dryRun ? "Would ask " : "Asked ") + window.Process + " to close.");
         }
     }
 }

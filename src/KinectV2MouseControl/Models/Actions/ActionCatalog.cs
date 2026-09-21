@@ -131,6 +131,8 @@ namespace KinectV2MouseControl
                 ActionCategory.WindowManagement, ControlActionType.CloseWindow, null, "close window"),
             RoutedNoRun("placewindow", "Place window", "Place a named window on a monitor and region through the assistant.",
                 ActionCategory.WindowManagement, ControlActionType.PlaceWindow, null, null),
+            RoutedNoRun("closewindowbyname", "Close named window", "Ask one named visible window to close through the assistant. Ambiguous names and KINECT-OS are refused.",
+                ActionCategory.WindowManagement, ControlActionType.CloseWindowByName, null, null),
 
             // ---- Media -------------------------------------------------------------------
             Routed("playpause", "Play / pause", "Media play-pause key.", ActionCategory.Media, ControlActionType.PlayPause, null, "play / pause"),
@@ -168,6 +170,8 @@ namespace KinectV2MouseControl
             Custom("openfile", "Open found file", "Open an allowed document or media file found in the same request.", ControlAction.Of(ControlActionType.OpenFile)),
             Custom("listwindows", "List windows", "Read visible window titles, processes and monitor numbers.", ControlAction.Of(ControlActionType.ListWindows)),
             Custom("typetext", "Type text", "Enter up to 500 characters; shells and system tools are refused.", ControlAction.Of(ControlActionType.TypeText)),
+            RoutedNoRun("opendeeplink", "Open app deep link", "Open an allow-listed Spotify or Windows Settings deep link through the assistant.",
+                ActionCategory.Intelligence, ControlActionType.OpenDeepLink, null, null),
             new ActionDescriptor { Id = "intent", Name = "Natural-language requests", Description = "DeepSeek chooses from the bounded tools for one spoken or typed request.",
                 Category = ActionCategory.Intelligence, IsImplemented = true, CanRunFromUi = false },
             Planned("workflow", "Workflows", "Named multi-step routines, e.g. “focus mode” = mute, maximize, next window.",

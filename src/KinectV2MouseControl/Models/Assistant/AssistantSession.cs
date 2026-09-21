@@ -7,38 +7,65 @@ using System.Threading.Tasks;
 
 namespace KinectV2MouseControl
 {
+    internal sealed class AssistantArgument
+    {
+        public string Name;
+        public string JsonType;
+        public int? Minimum;
+        public int? Maximum;
+        public int? MaximumLength;
+
+        public static AssistantArgument Text(string name, int maximumLength = 8192)
+        { return new AssistantArgument { Name = name, JsonType = "string", MaximumLength = maximumLength }; }
+
+        public static AssistantArgument Integer(string name, int minimum, int maximum)
+        { return new AssistantArgument { Name = name, JsonType = "integer", Minimum = minimum, Maximum = maximum }; }
+
+        public object Schema()
+        {
+            if (JsonType == "integer") { return new { type = JsonType, minimum = Minimum.Value, maximum = Maximum.Value }; }
+            return new { type = JsonType, minLength = 1, maxLength = MaximumLength.Value };
+        }
+    }
+
     internal sealed class AssistantTool
     {
         public string Name;
         public string Description;
-        public string[] Required;
-        public string[] Optional;
+        public AssistantArgument[] Required;
+        public AssistantArgument[] Optional;
         public ControlActionType Type;
         public object Schema()
         {
             Dictionary<string, object> properties = new Dictionary<string, object>();
-            foreach (string key in Required.Concat(Optional))
-            { properties.Add(key, new { type = key == "monitor" ? "integer" : "string" }); }
+            foreach (AssistantArgument argument in Required.Concat(Optional))
+            { properties.Add(argument.Name, argument.Schema()); }
             return new { type = "function", function = new { name = Name, description = Description,
-                parameters = new { type = "object", properties, required = Required, additionalProperties = false } } };
+                parameters = new { type = "object", properties, required = Required.Select(argument => argument.Name).ToArray(), additionalProperties = false } } };
         }
     }
 
     internal static class AssistantTools
     {
-        private static AssistantTool Tool(string name, ControlActionType type, string required, string optional, string description)
-        { return new AssistantTool { Name = name, Type = type, Required = required.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries), Optional = optional.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries), Description = description }; }
+        private static readonly AssistantArgument[] None = new AssistantArgument[0];
+        private static AssistantArgument Text(string name, int maximumLength = 8192) { return AssistantArgument.Text(name, maximumLength); }
+        private static AssistantArgument Integer(string name, int minimum, int maximum) { return AssistantArgument.Integer(name, minimum, maximum); }
+        private static AssistantTool Tool(string name, ControlActionType type, AssistantArgument[] required, AssistantArgument[] optional, string description)
+        { return new AssistantTool { Name = name, Type = type, Required = required, Optional = optional, Description = description }; }
         public static readonly AssistantTool[] All = {
-            Tool("launch_app", ControlActionType.LaunchAppByName, "name", "", "Open an installed app by name. Ambiguous names are refused."),
-            Tool("open_url", ControlActionType.OpenUrl, "url", "browser", "Open http/https. browser: default or edge."),
-            Tool("web_search", ControlActionType.WebSearch, "site query", "browser", "site: youtube, google or bing; browser: default or edge. Opens the search directly."),
-            Tool("find_files", ControlActionType.FindFiles, "query", "", "Find up to eight newest personal files with this text in their name."),
-            Tool("open_file", ControlActionType.OpenFile, "path", "", "Open a document/media path returned by find_files in this request."),
-            Tool("place_window", ControlActionType.PlaceWindow, "window monitor region", "", "Window process or exact title; monitor numbered left-to-right. region: maximize, left, right, top, bottom, top-left, top-right, bottom-left, bottom-right."),
-            Tool("list_windows", ControlActionType.ListWindows, "", "", "Read visible window titles, process names and monitor numbers when needed."),
-            Tool("type_text", ControlActionType.TypeText, "text", "", "Type at most 500 characters into a focused app. Shells and system tools are refused."),
-            Tool("custom_command", ControlActionType.None, "phrase", "", "Run exactly one configured user command phrase from context."),
-            Tool("builtin_action", ControlActionType.None, "id", "", "Run exactly one available built-in action id from context.")
+            Tool("launch_app", ControlActionType.LaunchAppByName, new[] { Text("name") }, None, "Open an installed app by name. Ambiguous names are refused."),
+            Tool("open_url", ControlActionType.OpenUrl, new[] { Text("url") }, new[] { Text("browser") }, "Open http/https. browser: default or edge."),
+            Tool("web_search", ControlActionType.WebSearch, new[] { Text("site"), Text("query") }, new[] { Text("browser") }, "site: youtube, google or bing; browser: default or edge. Opens the search directly."),
+            Tool("find_files", ControlActionType.FindFiles, new[] { Text("query") }, None, "Find up to eight newest personal files with this text in their name."),
+            Tool("open_file", ControlActionType.OpenFile, new[] { Text("path") }, None, "Open a document/media path returned by find_files in this request."),
+            Tool("place_window", ControlActionType.PlaceWindow, new[] { Text("window"), Integer("monitor", 1, 64), Text("region") }, None, "Window process or exact title; monitor numbered left-to-right. region: maximize, left, right, top, bottom, top-left, top-right, bottom-left, bottom-right."),
+            Tool("list_windows", ControlActionType.ListWindows, None, None, "Read visible window titles, process names and monitor numbers when needed."),
+            Tool("type_text", ControlActionType.TypeText, new[] { Text("text", 500) }, None, "Type at most 500 characters into a focused app. Shells and system tools are refused."),
+            Tool("set_volume", ControlActionType.SetVolume, new[] { Integer("level", 0, 100) }, None, "Set master volume to an exact integer level from 0 to 100. Unmutes above zero."),
+            Tool("close_window", ControlActionType.CloseWindowByName, new[] { Text("window") }, None, "Ask one named visible app window to close. Ambiguous names and KINECT-OS are refused."),
+            Tool("open_deep_link", ControlActionType.OpenDeepLink, new[] { Text("uri", 2048) }, None, "Open spotify:search:<song or artist>, another Spotify URI, or an ms-settings: URI. Only spotify: and ms-settings: are allowed."),
+            Tool("custom_command", ControlActionType.None, new[] { Text("phrase") }, None, "Run exactly one configured user command phrase from context."),
+            Tool("builtin_action", ControlActionType.None, new[] { Text("id") }, None, "Run exactly one available built-in action id from context.")
         };
 
         public static bool TryParse(string name, string json, out AssistantTool tool, out Dictionary<string, object> args, out string reason)
@@ -49,14 +76,19 @@ namespace KinectV2MouseControl
             {
                 args = AssistantJson.Read(json);
                 AssistantTool selected = tool;
-                if (args.Keys.Any(k => !selected.Required.Contains(k) && !selected.Optional.Contains(k))) { reason = "Unexpected argument."; return false; }
-                foreach (string key in tool.Required)
-                { if (!args.ContainsKey(key)) { reason = "Missing argument: " + key; return false; } }
+                AssistantArgument[] declared = selected.Required.Concat(selected.Optional).ToArray();
+                if (args.Keys.Any(key => !declared.Any(argument => argument.Name == key))) { reason = "Unexpected argument."; return false; }
+                foreach (AssistantArgument required in tool.Required)
+                { if (!args.ContainsKey(required.Name)) { reason = "Missing argument: " + required.Name; return false; } }
                 foreach (KeyValuePair<string, object> pair in args)
                 {
-                    if (pair.Key == "monitor")
-                    { if (!(pair.Value is int) || (int)pair.Value < 1 || (int)pair.Value > 64) { reason = "Monitor must be an integer from 1 to 64."; return false; } }
-                    else if (!(pair.Value is string) || string.IsNullOrWhiteSpace((string)pair.Value) || ((string)pair.Value).Length > 8192)
+                    AssistantArgument argument = declared.First(item => item.Name == pair.Key);
+                    if (argument.JsonType == "integer")
+                    {
+                        if (!(pair.Value is int) || (int)pair.Value < argument.Minimum.Value || (int)pair.Value > argument.Maximum.Value)
+                        { reason = argument.Name + " must be an integer from " + argument.Minimum.Value + " to " + argument.Maximum.Value + "."; return false; }
+                    }
+                    else if (!(pair.Value is string) || string.IsNullOrWhiteSpace((string)pair.Value) || ((string)pair.Value).Length > argument.MaximumLength.Value)
                     { reason = "Invalid text argument: " + pair.Key; return false; }
                 }
                 return true;
@@ -67,9 +99,10 @@ namespace KinectV2MouseControl
         public static ControlAction Action(AssistantTool tool, Dictionary<string, object> args)
         {
             Func<string, string> get = key => args.ContainsKey(key) ? (string)args[key] : null;
+            if (tool.Type == ControlActionType.SetVolume) { return ControlAction.SetVolumeTo((int)args["level"]); }
             return new ControlAction(tool.Type) { Request = new DesktopActionRequest { Name = get("name"), Url = get("url"), Browser = get("browser"),
                 Site = get("site"), Query = get("query"), Path = get("path"), Window = get("window"), Monitor = args.ContainsKey("monitor") ? (int)args["monitor"] : 0,
-                Region = get("region"), Text = get("text") } };
+                Region = get("region"), Text = get("text"), Uri = get("uri") } };
         }
     }
 

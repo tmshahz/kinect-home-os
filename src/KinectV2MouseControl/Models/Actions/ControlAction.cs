@@ -95,6 +95,8 @@ namespace KinectV2MouseControl
         OpenFile,
         PlaceWindow,
         ListWindows,
+        CloseWindowByName,
+        OpenDeepLink,
         TypeText
     }
 
@@ -213,6 +215,8 @@ namespace KinectV2MouseControl
                 case ControlActionType.PlaceWindow: return "Place window";
                 case ControlActionType.ListWindows: return "List windows";
                 case ControlActionType.TypeText: return "Type text";
+                case ControlActionType.CloseWindowByName: return "Close named window";
+                case ControlActionType.OpenDeepLink: return "Open app deep link";
                 default: return type.ToString();
             }
         }
