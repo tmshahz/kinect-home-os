@@ -178,7 +178,7 @@ Git Bash (dash-style switches, because MSYS mangles `/p:`):
 | `Models/Gestures/Recognizers/*.cs` | Clap, Lasso, Scroll (steady-neutral + curve), Swipe (clutch-gated) |
 | `Models/Diagnostics/RuntimeLog.cs` | Event log |
 | `Models/Profiles/ProfileStore.cs` | `TuningProfile` (nullable members), slots, JSON store |
-| `ViewModels/KinectCursorViewModel.cs` | Engine settings, Load/Save, defaults, profiles (+modified tracking, rename persists), calibration, `IsControlEnabled`, `ExecuteAction`, `LiveStatus` refresh, `Quit` |
+| `ViewModels/KinectCursorViewModel.cs` | Engine settings, Load/Save, defaults, profiles (+modified tracking, rename persists, `ReloadLastProfile`/`LastProfileSlot` reload the last slot on startup before the mode is applied), calibration, `IsControlEnabled`, `ExecuteAction`, `LiveStatus` refresh, `Quit` |
 | `Views/RadioCheckedToBoolConverter.cs` | Mode chips; `ConvertBack` must return `Binding.DoNothing` for unchecked |
 | `App.xaml.cs` | Merges themes, creates the window, `--ui-smoke-test`, crash / session-end / process-exit mouse release |
 | `Properties/Settings.*`, `App.config` | Persisted settings + defaults |
@@ -199,6 +199,9 @@ the right points). Double clap works in every mode except Disabled.
 5. No injected mouse-down may survive any teardown: tracking loss, sensor unavailable, stall,
    control disable, mode change, calibration, profile load/defaults, display change, session
    end/glitch destabilize, app exit, crash. `ReleaseAllGrips()` goes before `ResetControlState()`.
+   The pointer release grace (`PointerReleaseGrace`, 0.35 s) delays only the session teardown
+   when the right hand crosses the release boundary: grips release at once, no target or gesture
+   is published during the hold, and every forced teardown above still bypasses it entirely.
 6. Fixed hand roles: right = pointer (the only hand that can own/anchor the cursor), left =
    secondary. No first-activated-hand logic, no handoff, no left fallback.
 7. Secondary gestures only via `SecondaryGestureArmed` (the clutch). Don't scatter left-hand
@@ -334,9 +337,12 @@ Voice (any `Models/Voice` or vocabulary change):
       Thinking fade quietly; Executed / Rejected stay still with the transcript line
 - [ ] AI button on the widget is disabled when voice is off; when on, it chimes and opens a
       command window without the wake word; a second command in that session is ignored
-- [ ] Chat panel toggles with the chevron, opens when the assistant is busy, scrolls newest
-      at the bottom, accepts a typed request on Enter, Cancel while busy, remembers
-      open/closed after a restart; typing only works after clicking the box
+- [ ] Chat panel toggles with the chevron and remembers that state after a restart
+      (`OverlayChatOpen` is the chevron only); an assistant request opens it on its own, shows
+      the request line and the wrapping answer, and closes ~6 s after the reply without writing
+      the setting; hover, the request box or the chevron pins it open; a panel opened by hand is
+      never auto-closed; steps scroll newest at the bottom, Enter submits, Cancel while busy;
+      typing only works after clicking the box
 - [ ] Widget still drags smoothly, stays on top when asked, and never grows much past 460 px
 
 ## 7. Hardware-tested reference configuration (user-reported; preferences, not defaults)
@@ -371,7 +377,10 @@ Build 2 Shot 1 is implemented, COMPILE VERIFIED. Live DeepSeek was not tested be
 was saved; use AI → Test key & save, then `--ai-self-test --live`. The new actions
 are parameterized and excluded from the simple custom built-in action picker; they use
 `ActionRouter.ExecuteRequest` with per-request context. File searches are capped at two
-seconds and report partial results; reparse points and network paths are excluded.
+seconds and report partial results; reparse points and network paths are excluded. Candidates
+are pooled during the walk and ranked once at the end - exact name stem, whole token, prefix,
+then plain substring, with documents before other types and newer files breaking ties - and the
+top eight are returned.
 
 1. **Hardware validation of the current phase.** Everything below is COMPILE VERIFIED only:
    - fixed hand roles;
