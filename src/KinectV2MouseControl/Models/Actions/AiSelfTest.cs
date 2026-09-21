@@ -49,6 +49,7 @@ namespace KinectV2MouseControl
                 check(InstalledApps.Match("edge", apps).Count == 2 && InstalledApps.Match("Claude", apps).Single().Name == "Claude"
                     && InstalledApps.Match("Claud", apps).Single().Name == "Claude", "app ambiguity, exact and fuzzy matching");
                 TestFiles(check);
+                TestFileRanking(check);
             }
             catch (Exception ex) { failures++; output.AppendLine("FAIL " + ex); }
             output.AppendLine(failures == 0 ? "AI SELF-TEST PASSED" : "AI SELF-TEST FAILED: " + failures);
@@ -73,7 +74,7 @@ namespace KinectV2MouseControl
                 }
                 bool partial;
                 string[] found = SafeDesktopActions.Find("resume", new[] { folder }, CancellationToken.None, out partial);
-                check(found.Length == 8 && Path.GetFileName(found[0]) == "resume-0.txt" && !found.Contains(outside) && !partial, "file search: personal root, newest first, maximum eight");
+                check(found.Length == 8 && Path.GetFileName(found[0]) == "resume-0.txt" && !found.Contains(outside) && !partial, "file search: personal root, equal names newest first, maximum eight");
                 check(!SafeDesktopActions.IsPersonalFile(outside, new[] { folder })
                     && !SafeDesktopActions.IsBelow(folder + "-escape\\resume.txt", folder), "sibling directory cannot escape root boundary");
             }
@@ -82,6 +83,77 @@ namespace KinectV2MouseControl
                 // Only remove the exact files this test created; never recursively remove an inferred path.
                 for (int i = 0; i < 10; i++) { File.Delete(Path.Combine(folder, "resume-" + i + ".txt")); }
                 File.Delete(outside); Directory.Delete(folder); Directory.Delete(root);
+            }
+        }
+
+        private static void TestFileRanking(Action<bool, string> check)
+        {
+            check(RejectsQuery(@"folder\resume") && RejectsQuery("folder/resume") && RejectsQuery("C:resume")
+                && RejectsQuery("") && RejectsQuery(" ") && RejectsQuery(new string('r', 201)),
+                "file search still refuses paths, empty queries and long queries");
+
+            string root = Path.Combine(Path.GetTempPath(), "KinectOS-rank-test-" + Guid.NewGuid().ToString("N"));
+            string folder = Path.Combine(root, "Documents");
+            Directory.CreateDirectory(folder);
+            string exact = Path.Combine(folder, "Resume.pdf");
+            string sameNameImage = Path.Combine(folder, "resume.png");
+            string newerPartial = Path.Combine(folder, "resume-screenshot.png");
+            string token = Path.Combine(folder, "My_Resume_2026.pdf");
+            string embedded = Path.Combine(folder, "preresume.txt");
+            string outside = Path.Combine(root, "Resume.pdf");
+            try
+            {
+                File.WriteAllText(outside, "no");
+                File.WriteAllText(exact, "cv");
+                File.SetLastWriteTimeUtc(exact, DateTime.UtcNow.AddDays(-30));
+                File.WriteAllText(sameNameImage, "img");
+                File.SetLastWriteTimeUtc(sameNameImage, DateTime.UtcNow.AddDays(-1));
+                File.WriteAllText(newerPartial, "img");
+                File.SetLastWriteTimeUtc(newerPartial, DateTime.UtcNow);
+                bool partial;
+                string[] found = SafeDesktopActions.Find("resume", new[] { folder }, CancellationToken.None, out partial);
+                check(!partial && found.Length == 3 && Path.GetFileName(found[0]) == "Resume.pdf"
+                    && Path.GetFileName(found[1]) == "resume.png" && !found.Contains(outside),
+                    "exact file name beats a newer partial match, and a document beats a newer same-name image");
+
+                File.Delete(exact);
+                File.Delete(sameNameImage);
+                File.Delete(newerPartial);
+                File.WriteAllText(token, "cv");
+                File.SetLastWriteTimeUtc(token, DateTime.UtcNow.AddDays(-10));
+                File.WriteAllText(embedded, "no");
+                File.SetLastWriteTimeUtc(embedded, DateTime.UtcNow);
+                found = SafeDesktopActions.Find("resume", new[] { folder }, CancellationToken.None, out partial);
+                check(!partial && found.Length == 2 && Path.GetFileName(found[0]) == "My_Resume_2026.pdf",
+                    "whole-token match beats a newer mid-word substring");
+                found = SafeDesktopActions.Find("my resume", new[] { folder }, CancellationToken.None, out partial);
+                check(found.Length == 1 && Path.GetFileName(found[0]) == "My_Resume_2026.pdf",
+                    "separator-insensitive match for a multi-word name");
+            }
+            finally
+            {
+                File.Delete(exact);
+                File.Delete(sameNameImage);
+                File.Delete(newerPartial);
+                File.Delete(token);
+                File.Delete(embedded);
+                File.Delete(outside);
+                Directory.Delete(folder);
+                Directory.Delete(root);
+            }
+        }
+
+        private static bool RejectsQuery(string query)
+        {
+            try
+            {
+                bool partial;
+                SafeDesktopActions.Find(query, new string[0], CancellationToken.None, out partial);
+                return false;
+            }
+            catch (ArgumentException)
+            {
+                return true;
             }
         }
     }

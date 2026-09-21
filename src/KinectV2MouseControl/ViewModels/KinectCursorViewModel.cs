@@ -899,6 +899,7 @@ namespace KinectV2MouseControl
         // ---- Profiles --------------------------------------------------------------------
 
         private int activeProfileSlot = -1;
+        private bool reloadLastProfile = true;
         private bool isActiveProfileModified;
         private bool isApplyingProfile;
         private string profileStatus = "";
@@ -940,6 +941,28 @@ namespace KinectV2MouseControl
             get
             {
                 return activeProfileSlot >= 0;
+            }
+        }
+
+        /// <summary>
+        /// When on, startup applies the profile last loaded or saved, after the saved settings
+        /// and before the control mode. Not part of a tuning profile.
+        /// </summary>
+        public bool ReloadLastProfile
+        {
+            get
+            {
+                return reloadLastProfile;
+            }
+            set
+            {
+                if (reloadLastProfile == value)
+                {
+                    return;
+                }
+
+                reloadLastProfile = value;
+                RaisePropertyChanged();
             }
         }
 
@@ -1036,7 +1059,7 @@ namespace KinectV2MouseControl
             string error;
             if (profileStore.Save(profiles, out error))
             {
-                activeProfileSlot = slot;
+                NoteProfileSlot(slot);
                 isActiveProfileModified = false;
                 profileStatus = "Saved " + target.Name + " at " + DateTime.Now.ToString("HH:mm:ss");
                 RuntimeLog.Write("Profile saved to slot " + (slot + 1) + " (" + target.Name + ")");
@@ -1073,13 +1096,19 @@ namespace KinectV2MouseControl
                 isApplyingProfile = false;
             }
 
-            activeProfileSlot = slot;
+            NoteProfileSlot(slot);
             isActiveProfileModified = false;
             profileStatus = "Loaded " + source.Name + " (saved " + source.SavedAt + ")";
             RuntimeLog.Write("Profile loaded from slot " + (slot + 1) + " (" + source.Name + ")");
             ActivityLog.Post(ActivityKind.Profile, "Profile loaded", source.Name + " (slot " + (slot + 1) + ")", "control center");
             RefreshProfileState();
             UpdateStatus();
+        }
+
+        private void NoteProfileSlot(int slot)
+        {
+            activeProfileSlot = slot;
+            Properties.Settings.Default.LastProfileSlot = slot;
         }
 
         /// <summary>
@@ -1192,9 +1221,46 @@ namespace KinectV2MouseControl
             HandCenterX = Properties.Settings.Default.HandCenterX;
             UseCalibratedRange = Properties.Settings.Default.UseCalibratedRange;
 
+            reloadLastProfile = Properties.Settings.Default.ReloadLastProfile;
+            RaisePropertyChanged("ReloadLastProfile");
+            TryReloadLastProfile();
+
             // Last: selecting a mode opens the sensor, so every setting is in place before the
             // first frame can arrive.
             ControlModeIndex = Properties.Settings.Default.Mode;
+        }
+
+        /// <summary>
+        /// Applies the last loaded or saved slot through LoadProfile. An empty, missing or
+        /// failed slot leaves the settings just loaded and never blocks startup.
+        /// </summary>
+        private void TryReloadLastProfile()
+        {
+            if (!reloadLastProfile)
+            {
+                return;
+            }
+
+            int slot = Properties.Settings.Default.LastProfileSlot;
+            if (slot < 0)
+            {
+                return;
+            }
+
+            if (slot >= profiles.Slots.Length || profiles.Slots[slot] == null || profiles.Slots[slot].IsEmpty)
+            {
+                RuntimeLog.Write("Last profile slot " + (slot + 1) + " is empty or missing; keeping saved settings");
+                return;
+            }
+
+            try
+            {
+                LoadProfile(slot);
+            }
+            catch (Exception ex)
+            {
+                RuntimeLog.Write("Last profile could not be loaded; keeping saved settings (" + ex.Message + ")");
+            }
         }
 
         public void SaveSettings()
@@ -1223,6 +1289,11 @@ namespace KinectV2MouseControl
             Properties.Settings.Default.HandRangeY = HandRangeY;
             Properties.Settings.Default.HandCenterX = HandCenterX;
             Properties.Settings.Default.Mode = ControlModeIndex;
+            Properties.Settings.Default.ReloadLastProfile = reloadLastProfile;
+            if (activeProfileSlot >= 0)
+            {
+                Properties.Settings.Default.LastProfileSlot = activeProfileSlot;
+            }
 
             Properties.Settings.Default.Save();
         }

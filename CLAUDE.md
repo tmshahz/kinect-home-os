@@ -120,7 +120,7 @@ Git Bash (use `-p:` not `/p:`; MSYS rewrites `/p:` as a path):
 
 | File | Location | Notes |
 |---|---|---|
-| Last-used settings | `%LOCALAPPDATA%\KinectV2MouseControl\KinectV2MouseControl.exe_Url_<hash>\1.2.1.0\user.config` | .NET user settings, **per exe path** (Debug and Release differ). Saved only on normal close. Tuning + mode + the UI settings (`CompactOnMinimize`, `StartCompact`, `OverlayAlwaysOnTop`, `OverlayLeft/Top`, `OverlayChatOpen`, `VoiceEnabled`, `VoiceWakeSensitivity` (0-100), `VoiceCommandThreshold`, `VoiceDismissSound`, `VoiceInputDeviceId` + `VoiceInputDeviceName` = chosen microphone, empty = System Default, wake word `VoiceWakePhrase` (default "Jarvis"; a stale `VoiceWakeWord` = "Kinect" entry from an earlier build is ignored on purpose)) |
+| Last-used settings | `%LOCALAPPDATA%\KinectV2MouseControl\KinectV2MouseControl.exe_Url_<hash>\1.2.1.0\user.config` | .NET user settings, **per exe path** (Debug and Release differ). Saved only on normal close. Tuning + mode + the UI settings (`CompactOnMinimize`, `StartCompact`, `OverlayAlwaysOnTop`, `OverlayLeft/Top`, `OverlayChatOpen`, `VoiceEnabled`, `VoiceWakeSensitivity` (0-100), `VoiceCommandThreshold`, `VoiceDismissSound`, `VoiceInputDeviceId` + `VoiceInputDeviceName` = chosen microphone, empty = System Default, wake word `VoiceWakePhrase` (default "Jarvis"; a stale `VoiceWakeWord` = "Kinect" entry from an earlier build is ignored on purpose), `ReloadLastProfile` (default true) and `LastProfileSlot` (int, default -1 = none; written when a profile slot is loaded or saved; startup reloads that slot before the control mode when the toggle is on)) |
 | Profiles | `%LOCALAPPDATA%\KinectHomeOS\profiles.json` | 3 slots, shared by all builds. Atomic write. Unreadable file is moved to `profiles.json.bad`. A slot rename is saved immediately |
 | DeepSeek key | `%LOCALAPPDATA%\KinectHomeOS\secrets\deepseek.key` | DPAPI CurrentUser-encrypted; written only by AI → Test key & save after a successful test call; Remove key deletes it. Never in user.config, logs, Activity or the repo; only sent to `https://api.deepseek.com` (redirects disabled) |
 | AI self-test | `%LOCALAPPDATA%\KinectHomeOS\ai-self-test.txt` | Written by `--ai-self-test` (exit 0 = pass, 4 = fail): dry-run action policies + scripted-model tool loop; `--live` adds 3 real DeepSeek requests in dry run when a key is saved |
@@ -483,6 +483,7 @@ A `HandStateFilter` configured from `GestureTuning`:
   - All members are nullable, so older profiles leave newer settings untouched.
   - Save asks before overwriting a non-empty slot.
   - Status shows the active profile and "(modified)" after any tuning change.
+  - `ReloadLastProfile` (default true) and `LastProfileSlot` (default -1) live in user settings, not in `TuningProfile`. A successful load or save records the slot. On startup, after the other settings load and before the control mode is applied, a valid non-empty slot is loaded through `LoadProfile`, so the batch still goes through `ApplySettings`. An empty or failed slot keeps the saved settings, and that miss is written to `RuntimeLog`.
 - **Help:**
   - `ControlHelp` is the single source of explanations (what, higher, lower, too high, too low).
   - `TuningSlider` looks its entry up by `HelpKey` (defaults to `Label`); plain toggles/buttons
@@ -1048,7 +1049,7 @@ inspect relevant code → smallest coherent change → build Debug → build Rel
 **Build 2 milestone 2 (implemented, COMPILE VERIFIED):** `SafeDesktopActions`, `InstalledApps`
 and `DesktopWindows` sit behind `ActionRouter.ExecuteRequest` on the UI thread. New semantic
 actions launch indexed Start Menu/MSIX apps by name (ambiguity refuses), open http/https URLs,
-search YouTube/Google/Bing, find up to eight newest personal files, open allowed document/media
+search YouTube/Google/Bing, find up to eight personal files ranked by name (exact stem, whole token, prefix, then substring; documents before other types; newer files break ties), open allowed document/media
 files found in that same request, list visible windows, place windows in numbered monitor work
 areas, and type up to 500 Unicode characters. Text input refuses shells/system tools and this
 process. Window ordering uses `DesktopLayout` left-to-right, then top-to-bottom; placement uses

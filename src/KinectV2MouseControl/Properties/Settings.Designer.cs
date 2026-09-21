@@ -498,5 +498,21 @@ namespace KinectV2MouseControl.Properties {
             get { return (bool)this["SendOtherRequestsToAI"]; }
             set { this["SendOtherRequestsToAI"] = value; }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool ReloadLastProfile
+        {
+            get { return (bool)this["ReloadLastProfile"]; }
+            set { this["ReloadLastProfile"] = value; }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("-1")]
+        public int LastProfileSlot
+        {
+            get { return (int)this["LastProfileSlot"]; }
+            set { this["LastProfileSlot"] = value; }
+        }
     }
 }

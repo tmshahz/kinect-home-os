@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 
 namespace KinectV2MouseControl
@@ -42,8 +43,11 @@ namespace KinectV2MouseControl
 
     internal static class SafeDesktopActions
     {
+        private const int MaxRankedCandidates = 300;
         private static readonly HashSet<string> Extensions = new HashSet<string>(
             (".pdf .doc .docx .xls .xlsx .ppt .pptx .txt .md .csv .rtf .odt .png .jpg .jpeg .gif .webp .mp3 .wav .m4a .mp4 .mkv .mov .html").Split(' '), StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> DocumentExtensions = new HashSet<string>(
+            ".pdf .doc .docx .xls .xlsx .ppt .pptx .txt .md .csv .rtf .odt".Split(' '), StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> NoTyping = new HashSet<string>(
             ("cmd powershell pwsh WindowsTerminal conhost wt explorer regedit mmc Taskmgr KinectV2MouseControl KINECT-OS").Split(' '), StringComparer.OrdinalIgnoreCase);
 
@@ -189,17 +193,149 @@ namespace KinectV2MouseControl
                         FileAttributes attributes = File.GetAttributes(item);
                         if ((attributes & FileAttributes.ReparsePoint) != 0) { continue; }
                         if ((attributes & FileAttributes.Directory) != 0) { pending.Push(item); }
-                        else if (Path.GetFileName(item).IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 && IsPersonalFile(item, roots))
+                        else if (FileNameMatches(Path.GetFileName(item), query) && IsPersonalFile(item, roots))
                         {
-                            matches.Add(new FileInfo(item));
-                            matches = matches.OrderByDescending(f => f.LastWriteTimeUtc).Take(8).ToList();
+                            ConsiderCandidate(matches, new FileInfo(item), query);
                         }
                     }
                 }
                 catch (UnauthorizedAccessException) { }
                 catch (IOException) { }
             }
-            return matches.Select(f => f.FullName).ToArray();
+
+            return matches
+                .OrderBy(file => Relevance(file.Name, query))
+                .ThenBy(file => DocumentRank(file.Extension))
+                .ThenByDescending(file => file.LastWriteTimeUtc)
+                .Take(8)
+                .Select(file => file.FullName)
+                .ToArray();
+        }
+
+        /// <summary>
+        /// Hold at most 300 names. A later match is dropped only when it ranks worse than
+        /// everything already held, never because it is older. The list is ordered once, after the walk.
+        /// </summary>
+        private static void ConsiderCandidate(List<FileInfo> matches, FileInfo candidate, string query)
+        {
+            if (matches.Count < MaxRankedCandidates)
+            {
+                matches.Add(candidate);
+                return;
+            }
+
+            int worst = 0;
+            for (int i = 1; i < matches.Count; i++)
+            {
+                if (CompareCandidates(matches[worst], matches[i], query) < 0)
+                {
+                    worst = i;
+                }
+            }
+
+            if (CompareCandidates(candidate, matches[worst], query) < 0)
+            {
+                matches[worst] = candidate;
+            }
+        }
+
+        /// <summary>Negative when left belongs ahead of right.</summary>
+        private static int CompareCandidates(FileInfo left, FileInfo right, string query)
+        {
+            int relevance = Relevance(left.Name, query).CompareTo(Relevance(right.Name, query));
+            if (relevance != 0) { return relevance; }
+            int document = DocumentRank(left.Extension).CompareTo(DocumentRank(right.Extension));
+            if (document != 0) { return document; }
+            return right.LastWriteTimeUtc.CompareTo(left.LastWriteTimeUtc);
+        }
+
+        private static int DocumentRank(string extension)
+        {
+            return DocumentExtensions.Contains(extension) ? 0 : 1;
+        }
+
+        private static bool FileNameMatches(string fileName, string query)
+        {
+            if (fileName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0) { return true; }
+            string normalizedQuery = NormalizeName(query);
+            return normalizedQuery.Length > 0
+                && NormalizeName(fileName).IndexOf(normalizedQuery, StringComparison.Ordinal) >= 0;
+        }
+
+        /// <summary>
+        /// 0 exact stem, 1 each query word is a whole token, 2 prefix, 3 substring.
+        /// Space, hyphen, underscore and dot are the same token boundary.
+        /// </summary>
+        private static int Relevance(string fileName, string query)
+        {
+            string stem = NormalizeName(Path.GetFileNameWithoutExtension(fileName));
+            string normalizedQuery = NormalizeName(query);
+            if (stem.Length > 0 && stem == normalizedQuery) { return 0; }
+
+            string[] queryTokens = SplitTokens(normalizedQuery);
+            string[] nameTokens = SplitTokens(NormalizeName(fileName));
+            if (TokensMatch(nameTokens, queryTokens, false)) { return 1; }
+            if ((normalizedQuery.Length > 0 && stem.StartsWith(normalizedQuery, StringComparison.Ordinal))
+                || TokensMatch(nameTokens, queryTokens, true))
+            { return 2; }
+            return 3;
+        }
+
+        private static bool TokensMatch(string[] nameTokens, string[] queryTokens, bool asPrefix)
+        {
+            if (queryTokens.Length == 0) { return false; }
+            bool[] used = new bool[nameTokens.Length];
+            for (int q = 0; q < queryTokens.Length; q++)
+            {
+                bool found = false;
+                for (int n = 0; n < nameTokens.Length; n++)
+                {
+                    if (used[n]) { continue; }
+                    bool hit = asPrefix
+                        ? nameTokens[n].StartsWith(queryTokens[q], StringComparison.Ordinal)
+                        : nameTokens[n] == queryTokens[q];
+                    if (!hit) { continue; }
+                    used[n] = true;
+                    found = true;
+                    break;
+                }
+
+                if (!found) { return false; }
+            }
+
+            return true;
+        }
+
+        private static string[] SplitTokens(string normalized)
+        {
+            if (string.IsNullOrEmpty(normalized)) { return new string[0]; }
+            return normalized.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private static string NormalizeName(string value)
+        {
+            if (string.IsNullOrEmpty(value)) { return ""; }
+            StringBuilder builder = new StringBuilder(value.Length);
+            bool pendingSpace = false;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = char.ToLowerInvariant(value[i]);
+                if (c == ' ' || c == '-' || c == '_' || c == '.')
+                {
+                    if (builder.Length > 0) { pendingSpace = true; }
+                    continue;
+                }
+
+                if (pendingSpace)
+                {
+                    builder.Append(' ');
+                    pendingSpace = false;
+                }
+
+                builder.Append(c);
+            }
+
+            return builder.ToString();
         }
     }
 }

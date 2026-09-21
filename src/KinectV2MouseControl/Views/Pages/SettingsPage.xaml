@@ -45,7 +45,9 @@
                         <CheckBox x:Name="StartCompactCheck" Style="{StaticResource Toggle}" Content="Start in compact mode"
                                   IsChecked="{Binding StartCompact, Mode=TwoWay}" Margin="0,0,0,10"/>
                         <CheckBox x:Name="OverlayTopCheck" Style="{StaticResource Toggle}" Content="Keep the widget above other windows"
-                                  IsChecked="{Binding OverlayAlwaysOnTop, Mode=TwoWay}"/>
+                                  IsChecked="{Binding OverlayAlwaysOnTop, Mode=TwoWay}" Margin="0,0,0,10"/>
+                        <CheckBox x:Name="ReloadLastProfileCheck" Style="{StaticResource Toggle}" Content="Reload the last profile"
+                                  IsChecked="{Binding Engine.ReloadLastProfile, Mode=TwoWay}"/>
                         <TextBlock Style="{StaticResource Text.Caption}" Margin="0,12,0,0"
                                    Text="The tray icon is always available: double-click it to open the control center, or right-click for compact mode, the control switch and Quit."/>
                     </StackPanel>
