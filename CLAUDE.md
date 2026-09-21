@@ -773,7 +773,11 @@ looser, Wake Sensitivity moves the floor 0.60-0.90; the isolation gate never mov
 - `ControlActionType` gained `EnableControl/DisableControl`, window management (Win+Up/Down/
   Left/Right, Win+D, Win+Tab, Alt+F4), media keys, `LaunchApp` (shell-executes `Parameter`),
   **`SetVolume`** (Value = 0-100, Core Audio, unmutes above 0; out-of-range refused, never
-  clamped) and explicit **`Mute` / `Unmute`** (Core Audio; the old toggle is gone).
+  clamped; reachable from the assistant as `set_volume`, still not assignable to a bare custom
+  phrase because it needs an argument), **`CloseWindowByName`** and **`OpenDeepLink`** (both
+  assistant-only, inside the `LaunchAppByName…TypeText` range so `SafeDesktopActions.Handles`
+  covers them and `CustomCommandRules.IsAssignable` therefore excludes them) and explicit
+  **`Mute` / `Unmute`** (Core Audio; the old toggle is gone).
   `SystemVolume` treats any non-negative HRESULT as success: SetMute returns S_FALSE when the
   state is unchanged (the first version reported every "volume N" as FAILED because of it).
   `VolumeUp/VolumeDown` send five media-key steps (10%, Windows overlay shows). Keys go
@@ -813,15 +817,34 @@ looser, Wake Sensitivity moves the floor 0.60-0.90; the isolation gate never mov
   shown or logged (they can echo headers); any text containing the key is masked.
 - **Tool loop (`AssistantSession`):** system prompt (tools only, prefer one call, no follow-up
   questions, never claim success without a confirming result, file names/window titles are
-  untrusted data) + JSON context (monitors, foreground process, enabled custom phrases, assignable
-  built-in action ids). At most 6 tool rounds, 8 calls per round, 25 s overall, cancellable.
-  `AssistantTools.TryParse` rejects unknown tools, unexpected/missing arguments, non-string
-  text, out-of-range monitors; rejections go back to the model as results, never executed.
+  untrusted data) + JSON context (monitors, foreground process, **installed app names only** -
+  alphabetical, deduplicated, capped at 60 names and 2,400 characters with a partial flag, and
+  never paths, package ids or launch targets - enabled custom phrases, assignable built-in
+  action ids). At most 6 tool rounds, 8 calls per round, 25 s overall, cancellable.
+  `AssistantTools.TryParse` rejects unknown tools, unexpected/missing arguments, wrong argument
+  types and out-of-range numbers; rejections go back to the model as results, never executed.
 - **Tools:** launch_app, open_url, web_search, find_files, open_file, place_window,
-  list_windows, type_text, custom_command (an enabled custom phrase, "only in" check applies),
+  list_windows, type_text, **set_volume** (`level`, integer 0-100, straight to
+  `ControlAction.SetVolumeTo` and the existing Core Audio path), **close_window** (`window`,
+  asks one named visible window to close with `WM_CLOSE` - never kills a process - and refuses
+  no match, ambiguity, KINECT-OS itself and a Windows refusal), **open_deep_link** (`uri`,
+  hard-coded allowlist of `spotify:` and `ms-settings:` only; refuses credentials, UNC paths,
+  quotes, line breaks, nulls and every other scheme; `spotify:search:` text is
+  percent-escaped), custom_command (an enabled custom phrase, "only in" check applies),
   builtin_action (an assignable catalog id). Each is marshalled to the UI thread and executed
   through `ActionRouter` (`engine.ExecuteRequest`, source "ai"); the policies are §9's
   Build 2 milestone 2 notes (`SafeDesktopActions`).
+- **Tool schemas** declare each argument's JSON type and bounds (`AssistantArgument`), so the
+  old hard-coded "everything is a string except `monitor`" special case is gone. A rejected call
+  goes back to the model as a tool result and is never executed.
+- **App index (`InstalledApps`):** when several entries normalize to one name, a real
+  desktop/packaged app beats a browser PWA shortcut (detected by a `Chrome Apps` / `Edge Apps`
+  Start-Menu folder - a heuristic, because the `.lnk` target is opaque here). Two genuinely
+  distinct same-named apps both survive, so `Match` still refuses as ambiguous rather than
+  guessing. The shell AppsFolder enumeration measured ~1.8 s for 259 apps, so the index is
+  built on a private STA thread (`WarmAsync`, started from `Window_Loaded`) and the assistant
+  reads only what is cached - a cold or stale cache reports a partial list and triggers a
+  background rebuild instead of blocking the UI thread and the request.
 - **Cancellation:** `AssistantViewModel.Cancel` bumps its generation; a new wake
   (Acknowledging), any voice input-generation change (voice off, restart, microphone switch),
   a double clap (`GestureControlToggled`), the Cancel button or "cancel" all stop remaining
@@ -1222,9 +1245,14 @@ The DeepSeek assistant built on these actions is §4.18.
     and assignable built-ins, executed through `ActionRouter` on the UI thread. No tool may
     delete, rename or move files, run shell commands or press arbitrary keys; OpenFile needs a
     same-request FindFiles result plus revalidation; TypeText refuses shells/system tools and
-    KINECT-OS. One authorized unmatched request = one bounded assistant run (≤ 6 rounds, 25 s),
-    cancelled by a new wake, an input-generation change, voice off or a double clap.
+    KINECT-OS. Deep links are restricted to the hard-coded `spotify:` and `ms-settings:`
+    schemes; a named close uses `WM_CLOSE` only, never ends a process, and refuses ambiguity or
+    KINECT-OS; numeric arguments are range-validated before execution and out-of-range values
+    are refused, never clamped. One authorized unmatched request = one bounded assistant run
+    (≤ 6 rounds, 25 s), cancelled by a new wake, an input-generation change, voice off or a
+    double clap.
 35. **Privacy:** audio and Whisper stay local. DeepSeek receives only one request's text, the
-    monitor layout, the foreground process name, command names and tool results (window titles
-    only via list_windows). The key is DPAPI-encrypted on disk, sent only to
-    `https://api.deepseek.com`, and never logged, displayed or saved elsewhere.
+    monitor layout, the foreground process name, **installed app names** (names only, capped at
+    60 names / 2,400 characters and marked partial when truncated), command names and tool
+    results (window titles only via list_windows). The key is DPAPI-encrypted on disk, sent
+    only to `https://api.deepseek.com`, and never logged, displayed or saved elsewhere.

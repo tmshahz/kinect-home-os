@@ -7,6 +7,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace KinectV2MouseControl
 {
@@ -20,6 +21,42 @@ namespace KinectV2MouseControl
         }
         private static List<Entry> cache;
         private static DateTime cachedAt;
+        private static int warming;
+
+        /// <summary>
+        /// Builds the index on a private STA thread so no caller pays for it. Enumerating the
+        /// shell AppsFolder measured ~1.8 s on this machine (259 apps), and the assistant reads
+        /// the app names on the UI thread for every request - blocking there froze the window
+        /// and added that time to the request's own latency. Called once at startup, and again
+        /// whenever a read finds the cache stale. Shell.Application is apartment-threaded, so
+        /// the thread is STA and owns the COM objects it creates.
+        /// </summary>
+        internal static void WarmAsync()
+        {
+            if (Interlocked.CompareExchange(ref warming, 1, 0) != 0) { return; }
+            Thread thread = new Thread(() =>
+            {
+                try { Rebuild(); }
+                catch (Exception) { /* A failed index is retried by the next read; never fatal. */ }
+                finally { Interlocked.Exchange(ref warming, 0); }
+            });
+            thread.IsBackground = true;
+            thread.Name = "KINECT-OS app index";
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+        }
+
+        /// <summary>
+        /// The cached index without ever building it: what the assistant sends as context. An
+        /// empty result means "not indexed yet", which is reported as a partial list rather
+        /// than stalling the request.
+        /// </summary>
+        private static List<Entry> Cached()
+        {
+            List<Entry> current = cache;
+            if (current == null || DateTime.UtcNow - cachedAt >= TimeSpan.FromMinutes(5)) { WarmAsync(); }
+            return current ?? new List<Entry>();
+        }
 
         private static object Member(object target, string name, bool method, params object[] args)
         { return target.GetType().InvokeMember(name, method ? BindingFlags.InvokeMethod : BindingFlags.GetProperty, null, target, args); }
@@ -30,6 +67,11 @@ namespace KinectV2MouseControl
         private static List<Entry> Index()
         {
             if (cache != null && DateTime.UtcNow - cachedAt < TimeSpan.FromMinutes(5)) { return cache; }
+            return Rebuild();
+        }
+
+        private static List<Entry> Rebuild()
+        {
             List<Entry> entries = new List<Entry>();
             foreach (Environment.SpecialFolder folder in new[] { Environment.SpecialFolder.StartMenu, Environment.SpecialFolder.CommonStartMenu })
             {
@@ -132,8 +174,18 @@ namespace KinectV2MouseControl
             return result.ToArray();
         }
 
+        /// <summary>
+        /// Reads only what is already cached, so an assistant request is never blocked by the
+        /// shell enumeration. A cold or stale cache triggers a background rebuild and reports
+        /// the list as partial.
+        /// </summary>
         internal static string[] Names(int maximumNames, int maximumCharacters, out bool truncated)
-        { return Names(Index(), maximumNames, maximumCharacters, out truncated); }
+        {
+            List<Entry> cached = Cached();
+            string[] names = Names(cached, maximumNames, maximumCharacters, out truncated);
+            if (cached.Count == 0) { truncated = true; }
+            return names;
+        }
 
         internal static List<Entry> Match(string name, IEnumerable<Entry> entries)
         {

@@ -376,6 +376,16 @@ in `runtime.log`.
 Build 2 Shot 1 is implemented, COMPILE VERIFIED. Live DeepSeek was not tested because no key
 was saved; use AI → Test key & save, then `--ai-self-test --live`. The new actions
 are parameterized and excluded from the simple custom built-in action picker; they use
+The assistant tool list also carries `set_volume` (integer 0-100), `close_window` (one named
+visible window, `WM_CLOSE`, refuses ambiguity and KINECT-OS, never kills a process) and
+`open_deep_link` (hard-coded `spotify:` / `ms-settings:` allowlist only). Tool schemas declare
+each argument's type and bounds. The model's context now also includes installed app **names**
+(capped at 60 names / 2,400 characters, partial flag, never paths) - that widens invariant 35,
+so keep it names-only. The app index prefers real desktop/packaged apps over browser PWA
+shortcuts, keeps genuine same-name apps ambiguous, and is built on a private STA thread
+(`InstalledApps.WarmAsync`) because the shell enumeration takes ~1.8 s; assistant requests read
+only the cached list and never block on it.
+
 `ActionRouter.ExecuteRequest` with per-request context. File searches are capped at two
 seconds and report partial results; reparse points and network paths are excluded. Candidates
 are pooled during the walk and ranked once at the end - exact name stem, whole token, prefix,

@@ -155,6 +155,10 @@ namespace KinectV2MouseControl
             shell.Engine.LoadSettings();
             shell.ApplyDeferredStartup();
 
+            // Off the UI thread and only on a real run: the shell app enumeration takes about
+            // two seconds, and the assistant reads the result for every request.
+            InstalledApps.WarmAsync();
+
             tray = new TrayIcon();
             tray.OpenRequested += (s, a) => ExitCompact();
             tray.CompactRequested += (s, a) => EnterCompact();
