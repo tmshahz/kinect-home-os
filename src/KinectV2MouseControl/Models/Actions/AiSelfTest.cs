@@ -19,6 +19,35 @@ namespace KinectV2MouseControl
                 check(SafeDesktopActions.CheckedUrl("https://example.com/", "edge") == "microsoft-edge:https://example.com/", "Edge URL construction");
                 ActionRouter router = new ActionRouter();
                 DesktopActionContext context = new DesktopActionContext { DryRun = true };
+                AssistantTool tool; System.Collections.Generic.Dictionary<string, object> arguments; string reason;
+                check(AssistantTools.TryParse("set_volume", "{\"level\":30}", out tool, out arguments, out reason)
+                    && AssistantTools.Action(tool, arguments).Value == 30, "set_volume schema and action routing");
+                check(!AssistantTools.TryParse("set_volume", "{\"level\":200}", out tool, out arguments, out reason), "set_volume schema refuses 200");
+                check(router.ExecuteRequest(ControlAction.SetVolumeTo(30), context, "ai").Success, "set_volume dry-run valid");
+                check(!router.ExecuteRequest(ControlAction.SetVolumeTo(200), context, "ai").Success, "set_volume dry-run refuses 200");
+                check(SafeDesktopActions.CheckedDeepLink("spotify:search:lo-fi & café") == "spotify:search:lo-fi%20%26%20caf%C3%A9", "deep link search query encoding");
+                check(AssistantTools.TryParse("open_deep_link", "{\"uri\":\"ms-settings:privacy-microphone\"}", out tool, out arguments, out reason)
+                    && router.ExecuteRequest(AssistantTools.Action(tool, arguments), context, "ai").Success, "open_deep_link dry-run valid");
+                check(SafeDesktopActions.Handles(ControlActionType.CloseWindowByName) && SafeDesktopActions.Handles(ControlActionType.OpenDeepLink),
+                    "new desktop actions are handled and excluded from custom voice commands");
+                foreach (string bad in new[] { "file:///C:/x", "shell:AppsFolder", "javascript:alert(1)", "data:text/plain,no", "\\\\server\\share", "spotify://user:secret@host", "spotify:search:bad\nname" })
+                {
+                    check(!router.ExecuteRequest(new ControlAction(ControlActionType.OpenDeepLink) { Request = new DesktopActionRequest { Uri = bad } }, context, "ai").Success,
+                        "deep link refused: " + bad.Split(':')[0]);
+                }
+                DesktopWindows.Window[] oneWindow = { new DesktopWindows.Window { Process = "music", Title = "Music Player" } };
+                check(AssistantTools.TryParse("close_window", "{\"window\":\"Music Player\"}", out tool, out arguments, out reason)
+                    && DesktopWindows.Close(AssistantTools.Action(tool, arguments).Request, true, oneWindow).Success, "close_window dry-run valid");
+                check(!DesktopWindows.Close(new DesktopActionRequest { Window = "missing" }, true, oneWindow).Success, "close_window refuses missing visible window");
+                DesktopWindows.Window[] ambiguous = { new DesktopWindows.Window { Process = "music", Title = "Music Player" }, new DesktopWindows.Window { Process = "music2", Title = "Music Player 2" } };
+                check(DesktopWindows.Match(ambiguous, "Player").Count == 2, "close_window shared matcher finds ambiguous titles");
+                check(!DesktopWindows.Close(new DesktopActionRequest { Window = "Player" }, true, ambiguous).Success, "close_window refuses ambiguous window");
+                DesktopWindows.Window[] self = { new DesktopWindows.Window { Process = System.Diagnostics.Process.GetCurrentProcess().ProcessName, Title = "KINECT-OS" } };
+                check(!DesktopWindows.Close(new DesktopActionRequest { Window = "KINECT-OS" }, true, self).Success, "close_window refuses KINECT-OS");
+                check(!AssistantTools.TryParse("close_window", "{}", out tool, out arguments, out reason), "close_window schema requires a name");
+                check(!CustomCommandRules.IsAssignable(ActionCatalog.Find("setvolume"))
+                    && !CustomCommandRules.IsAssignable(ActionCatalog.Find("closewindowbyname"))
+                    && !CustomCommandRules.IsAssignable(ActionCatalog.Find("opendeeplink")), "parameterized assistant actions stay out of custom voice commands");
                 foreach (string bad in new[] { "file:///C:/x", "javascript:alert(1)", "ms-settings:", "https://user:secret@example.com/" })
                 {
                     check(!router.ExecuteRequest(new ControlAction(ControlActionType.OpenUrl) { Request = new DesktopActionRequest { Url = bad } }, context, "ai").Success, "URL refused: " + bad.Split(':')[0]);

@@ -66,6 +66,15 @@ namespace KinectV2MouseControl
                 }
                 return LastResult;
             }
+            if (action.Type == ControlActionType.SetVolume)
+            {
+                if (!IsValidVolume(action.Value))
+                { return LastResult = DesktopActionResult.Refused("Volume must be a whole number from 0 to 100."); }
+                if (context.DryRun)
+                { return LastResult = DesktopActionResult.Ok("Would set volume to " + ((int)action.Value) + "%"); }
+                bool volumeSet = Execute(action, source);
+                return LastResult = volumeSet ? DesktopActionResult.Ok(action.ToString()) : DesktopActionResult.Refused("Could not perform " + action);
+            }
             if (context.DryRun) { return DesktopActionResult.Ok("Would run " + action); }
             bool done = Execute(action, source);
             return LastResult = done ? DesktopActionResult.Ok(action.ToString()) : DesktopActionResult.Refused("Could not perform " + action);
@@ -274,7 +283,7 @@ namespace KinectV2MouseControl
         /// </summary>
         private static bool ExecuteSetVolume(double value)
         {
-            if (double.IsNaN(value) || value < 0 || value > 100 || value != Math.Floor(value))
+            if (!IsValidVolume(value))
             {
                 RuntimeLog.Write("SetVolume refused: " + value);
                 return false;
@@ -288,6 +297,11 @@ namespace KinectV2MouseControl
             }
 
             return true;
+        }
+
+        private static bool IsValidVolume(double value)
+        {
+            return !double.IsNaN(value) && value >= 0 && value <= 100 && value == Math.Floor(value);
         }
 
         private static bool ExecuteMute(bool mute)
