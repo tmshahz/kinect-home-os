@@ -254,17 +254,21 @@ src/KinectV2MouseControl/
 | `ActivityLog.EntryAdded` | posting thread (UI in practice); `ShellViewModel` marshals into the ObservableCollection | on event |
 | Tray icon menu / double-click | WinForms message loop on the UI thread | on click |
 
-### 4.2 Fixed hand roles
+### 4.2 Latched hand roles
 
-`GestureContext.PointerHand = RightHand`, `SecondaryHand = LeftHand`.
-- **Right hand:** pointer, grip press/drag, click anchoring/freeze, lasso right click, hover click.
-  It is the only hand that can ever own the pointer.
-- **Left hand:** scroll and swipe, and only while the left-fist clutch is armed (GripToPress
-  mode). In the legacy two-hand modes it is the clicking hand (MoveGripPressing: left fist holds
-  the button; MoveLiftClicking: lifting clicks), and it only acts while a right-hand pointer
+`GestureContext.PointerHandIndex` / `SecondaryHandIndex` are **latched runtime roles**, not
+constants. The right hand owns the pointer at startup; the roles survive tracking loss, control
+disable and every other reset, and change only through `KinectCursor.UpdateRoleSwapLatch`
+(§4.4). The role is not persisted - a restart is always right-pointer.
+- **Pointer hand:** pointer, grip press/drag, click anchoring/freeze, lasso right click, hover
+  click. Exactly one physical hand owns the pointer and the cursor anchor at any instant.
+- **Secondary hand:** scroll and swipe, and only while that hand's fist clutch is armed
+  (GripToPress mode). In the legacy two-hand modes it is the clicking hand (MoveGripPressing:
+  fist holds the button; MoveLiftClicking: lifting clicks), and it only acts while a pointer
   session is active.
-- If the right hand leaves the activation zone, the pointer goes idle. There is no fallback to
-  the left hand and no hand handoff.
+- If the pointer hand leaves the activation zone the pointer goes idle. There is still **no
+  implicit handoff**: the other hand cannot take over by being higher, or by entering the zone
+  first, and never mid-drag. Only the explicit dwell latch swaps the roles.
 
 ### 4.3 Per body frame (`Kinect_OnTrackedBody`, ~30 Hz)
 
@@ -301,11 +305,25 @@ src/KinectV2MouseControl/
     and the skipped time carries into the next filter step;
   - more than `PointerMaxGlitchFrames` (3) glitches in a row ends the session and it
     re-stabilizes.
-- **Release grace**: once an Active session has crossed the activation release boundary, it
-  holds its last target for `PointerReleaseGrace` (0.35 s). No target or gesture is published
-  during that hold, and every grip releases immediately. Returning fully inside the activation
-  zone resumes the same session without re-seeding or stabilizing; expiry tears it down normally.
+- **Release grace and the role dwell share one clock** (`pointerOutOfZoneElapsed`). When the
+  pointer hand crosses the activation release boundary, every grip releases immediately and the
+  last target is held for `PointerReleaseGrace` (0.35 s), with no target or gesture published.
+  Returning inside the zone during that hold resumes the same session without re-seeding. If the
+  hand stays out, the session ends at 0.35 s **but the same clock keeps running** toward
+  `HandSwapDwell` (0.50 s) - so the gap between "cursor stops" and "other hand takes over" is
+  150 ms, not 850 ms. A return between 0.35 s and 0.50 s is an ordinary re-stabilize.
+- **Role swap** (`UpdateRoleSwapLatch`, run before `UpdatePointerHand` so the role is settled
+  first): once that shared clock reaches `HandSwapDwell`, the other hand takes the pointer role
+  only if it is activated, `JointState == Tracked` and `PositionWeight >= 1`, control is
+  enabled, calibration is idle, and **no grip or drag is held**. The clock accumulates whenever
+  the pointer hand is not activated, including with no session ever active, so raising only the
+  non-pointer hand from a cold start swaps after the dwell. Both hands raised can never flip the
+  roles, because the current owner must be *out of zone*. A swap releases grips defensively,
+  tears down the session, switches the roles, calls `ApplyInputMapping` for the new hand's
+  geometry, and requires a fresh Stabilizing → Active transition with `SeedSmoothing`. It is
+  logged as "Pointer role swapped".
 - Every teardown path resets the stabilizer to Waiting, so reacquisition always re-stabilizes.
+  The latched roles are **not** reset by teardown; only the reverse latch swaps them.
 
 ### 4.5 Pointer filtering chain (in order, Active sessions only)
 
@@ -420,30 +438,48 @@ A `HandStateFilter` configured from `GestureTuning`:
   Release is 0.12 m below either threshold. An Active session then holds its last cursor target
   for up to `PointerReleaseGrace` (0.35 s), with grips and gesture activity released, before it
   tears down.
-- **Pointer frame:** body-relative position, X ±0.185 m per hand, Y − `PointerCenterHeight`.
-- **Uncalibrated mapping:**
+- **Pointer frame:** body-relative position, X ±0.185 m for the physical hand, Y − that hand's
+  pointer-centre height.
+- **Uncalibrated mapping** (the fallback for *either* hand without enabled calibration):
   - InputRect `(-0.18, 1.65, 0.18, -1.65)`, `ScaleAlignment.LongerRange`, × `MoveScale`;
   - the mapping geometry is unchanged from the original.
-- **Calibrated mapping (`UseCalibratedRange`):**
-  - InputRect `BuildInputRect()` (HandRangeX × HandRangeY centred on HandCenterX, vertical 0),
+- **Calibrated mapping, per hand.** Each physical hand owns independent X/Y range, geometric
+  centre X, comfort centre X, repeatability spread and pointer-centre height. The right-hand
+  enable stays `UseCalibratedRange` (profile compatibility); the left hand has
+  `LeftHandCalibrated`. The Displays toggle and the Calibrate button act on **whichever hand
+  currently owns the pointer**.
+  - InputRect `BuildInputRect()` (that hand's HandRangeX × HandRangeY centred on its centre X),
     `ScaleAlignment.Both`;
   - **`MoveScale` is ignored** (forced to 1). The rectangle alone defines reach, and a leftover
     Movement Scale can no longer push the edges out of reach;
-  - the vertical centre is owned by `PointerCenterHeight`;
-  - unticking "Calibrated range" reverts instantly.
-- **Guided capture** (`Calibrate` button; right hand only; only activated, fully tracked samples):
+  - disabling calibration for the current hand returns that hand to the original mapping.
+- **Guided capture** (`Calibrate` button; captures the current pointer hand; only activated,
+  fully tracked samples):
   - Five points in order: centre, left, right, top, bottom.
-  - Each point is the mean of a 0.6 s hold within 3 cm.
-  - Each extent must be ≥ 0.08 m from centre in its own direction.
+  - **Two independent holds per point** (`CalibrationPassesPerPoint` 2), each
+    `CalibrationHoldDuration` 0.60 s within `CalibrationSteadyRadius` 0.03 m, and the hand must
+    move ≥ `CalibrationPassResetDistance` 0.05 m away between them, so the two holds are real
+    evidence rather than one long pose.
+  - Within a hold, samples are reduced around the coordinate median and the furthest
+    `CalibrationOutlierTrimFraction` 20% are discarded before averaging.
+  - Holds more than `CalibrationAgreementTolerance` 0.04 m apart **retry that point** with a
+    visible "hold steadier / try again"; the gate stops a worse point being accepted.
+  - Each extent must be ≥ `CalibrationMinimumExtent` 0.08 m from the captured comfort centre.
   - Result:
-    - `HandRangeX = (right − left) × 0.9`;
-    - `HandRangeY = (top − bottom) × 0.9`;
-    - `HandCenterX = midpoint`;
-    - `PointerCenterHeight += vertical midpoint`;
-    - calibrated mode turns on.
-  - The 0.9 factor is a 5% edge assist per side.
+    - `HandRangeX = (right − left) × 0.90`;
+    - `HandRangeY = (top − bottom) × 0.90`;
+    - `HandCenterX` = geometric midpoint; `HandComfortCenterX` = the separately captured
+      comfortable centre (posture/diagnostic data only - it does **not** create a gain
+      transition, see below);
+    - pointer height receives the captured vertical midpoint;
+    - the worst X/Y disagreement between holds is stored as `CalibrationSpreadX/Y` and shown on
+      Displays; ≥ `CalibrationNoisySpread` 0.025 m is labelled NOISY - repeat calibration;
+    - calibrated mode turns on for that hand.
+  - The 0.90 factor is `CalibrationEdgeAssist` 0.05 per side.
   - Tiny ranges are rejected and the previous mapping is kept.
   - While capturing, control output is off; the button reads "Cancel".
+  - A separate relaxed-reach pass per extent was considered and **not** added: it would roughly
+    double an already ten-hold ritual.
   - The linear mapping was kept deliberately. A piecewise mapping pinning the captured centre was
     rejected because it puts a gain change in the most-used area. The centre point is used for
     validation and reported in the result text.
@@ -480,7 +516,11 @@ A `HandStateFilter` configured from `GestureTuning`:
 - **Profiles:**
   - `TuningProfile` holds every tuning and calibration value. It holds no control mode and no
     runtime state.
-  - All members are nullable, so older profiles leave newer settings untouched.
+  - All members are nullable, so older profiles leave newer settings untouched. The left hand's
+    geometry lives in nullable `LeftHandCalibrated`, `LeftHandRangeX/Y`, `LeftHandCenterX`,
+    `LeftHandComfortCenterX`, `LeftCalibrationSpreadX/Y` and `LeftPointerCenterHeight`, so an
+    older profile (the user's slot 1) loads with the left hand simply uncalibrated. Nothing
+    migrates and `profiles.json` is never rewritten on load.
   - Save asks before overwriting a non-empty slot.
   - Status shows the active profile and "(modified)" after any tuning change.
   - `ReloadLastProfile` (default true) and `LastProfileSlot` (default -1) live in user settings, not in `TuningProfile`. A successful load or save records the slot. On startup, after the other settings load and before the control mode is applied, a valid non-empty slot is loaded through `LoadProfile`, so the batch still goes through `ApplySettings`. An empty or failed slot keeps the saved settings, and that miss is written to `RuntimeLog`.
@@ -861,7 +901,10 @@ physical testing.
 - HW: body-relative pointer, One Euro filter, speed responsiveness, stationary lock,
   high-rate output, virtual-desktop/DPI mapping, activation geometry.
 - CV:
-  - fixed right-hand pointer (no left fallback);
+  - latched hand roles: right-hand pointer at startup, explicit dwell-latch swap to the left
+    (§4.4), reversed secondary gestures, per-hand calibrated geometry;
+  - repeatable guided calibration: two independent holds per point, outlier trim, agreement
+    retry, stored repeatability spread and comfort centre (§4.12);
   - startup/reacquisition stabilization + seeding;
   - glitch rejection;
   - soft (continuous) jitter dead zone, which replaced the hard dead zone that was HW;
@@ -1003,6 +1046,12 @@ Code defaults (`Settings.settings`/`App.config`; ViewModel `DEFAULT_*` for the D
 | ClickFreeze | 0.15 |
 | PointerSettleTime | 0.25 |
 | PointerReleaseGrace | 0.35 |
+| HandSwapDwell | 0.50 |
+| CalibrationHoldDuration / SteadyRadius | 0.60 / 0.03 |
+| CalibrationPassesPerPoint / PassResetDistance | 2 / 0.05 |
+| CalibrationAgreementTolerance / NoisySpread | 0.04 / 0.025 |
+| CalibrationOutlierTrimFraction / MaxHoldSamples | 0.20 / 64 |
+| CalibrationMinimumExtent / EdgeAssist | 0.08 / 0.05 per side |
 | PointerCenterHeight | 0.5 |
 | ForwardActivation | 0.15 |
 | ActivationMinHeight | 0.25 |
@@ -1179,8 +1228,14 @@ The DeepSeek assistant built on these actions is §4.18.
    glitch destabilization, app exit, crash or equivalent. `ReleaseAllGrips()` goes before
    `ResetControlState()`. Every `LeftMouseDown` has a `handGrips[]` flag, and
    `MouseControl` tracks injected downs for the process-level fail-safe.
-6. **Fixed hand roles.** Only `PointerHand` (right) can own the pointer or anchor the cursor.
-   Never reintroduce a "first activated hand" or handoff.
+6. **Latched hand roles.** Exactly one physical hand owns the pointer and the cursor anchor at
+   any instant; the other owns secondary gestures. The right hand owns the pointer at startup.
+   Roles swap **only** through the explicit dwell latch: the current owner must stay out of its
+   activation zone for `HandSwapDwell`, the other hand must be activated and fully tracked,
+   control and body tracking must be valid, calibration must be idle, and no grip or drag may be
+   held. A swap is a full pointer-session teardown and reacquisition through `PointerStabilizer`
+   and `SeedSmoothing`. Never infer ownership from the first or highest activated hand, and
+   never hand off mid-drag.
 7. **Secondary gestures require `SecondaryGestureArmed`** (the left-fist clutch). Recognizers
    read `context.IsSecondaryGestureArmed`. Don't scatter left-hand `Closed` checks.
 8. **Every pointer session goes through `PointerStabilizer`** and starts from `SeedSmoothing`.
@@ -1197,8 +1252,11 @@ The DeepSeek assistant built on these actions is §4.18.
 14. Keep DPI awareness and physical-pixel `DesktopLayout` mapping. Use `SetCursorPos`, not
     SendInput absolute. No primary-monitor assumptions.
 15. Use real sensor `deltaTime`. Never assume 30 Hz.
-16. Uncalibrated mapping geometry stays the original. Calibration is opt-in, and in calibrated
-    mode MoveScale is not applied.
+16. **Per-hand mapping geometry.** Uncalibrated mapping for either physical hand stays the
+    original geometry and applies MoveScale. Each hand may independently opt into its own
+    calibrated X/Y range, centre and pointer height; a hand with no captured geometry keeps the
+    original mapping. Calibrated mapping stays linear with independent axis scaling and does not
+    apply MoveScale.
 17. Settings batches (profiles, defaults) go through `KinectCursor.ApplySettings`.
 18. The mode radio converter must return `Binding.DoNothing` for an unchecked radio.
 19. No broad refactors, no framework migration, no frontend redesign unless asked.

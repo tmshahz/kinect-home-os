@@ -131,7 +131,7 @@ Git Bash (dash-style switches, because MSYS mangles `/p:`):
 
 | File | Responsibility |
 |---|---|
-| `Models/KinectCursor.cs` | Orchestrator. Frame handler, activation zone, **right-hand-only pointer session**, grip/click/drag + anchoring, left-hand clicking for legacy two-hand modes, hover, stall watchdog, control gate, calibration glue, display changes, `ApplySettings` batches, diagnostics, all reset paths |
+| `Models/KinectCursor.cs` | Orchestrator. Frame handler, activation zone, **latched pointer/secondary roles (`UpdateRoleSwapLatch`) and per-hand mapping**, pointer session, grip/click/drag + anchoring, secondary-hand clicking for legacy two-hand modes, hover, stall watchdog, control gate, calibration glue, display changes, `ApplySettings` batches, diagnostics, all reset paths |
 | `Models/CursorControlInput/KinectReader.cs` | Sensor open/close/availability. Scored body lock (≥3/6 core joints Tracked, nearest). Degraded-body switch. `OnTrackedBody` / `OnLostTracking` |
 | `Models/CursorControlInput/PointerStabilizer.cs` | Waiting → Stabilizing → Active, settle time/frames, glitch skip / destabilize, seed position |
 | `Models/CursorControlInput/KinectBodyHelper.cs` | SpineBase-relative geometry, joint weights/states, hand state + confidence |
@@ -202,8 +202,12 @@ the right points). Double clap works in every mode except Disabled.
    The pointer release grace (`PointerReleaseGrace`, 0.35 s) delays only the session teardown
    when the right hand crosses the release boundary: grips release at once, no target or gesture
    is published during the hold, and every forced teardown above still bypasses it entirely.
-6. Fixed hand roles: right = pointer (the only hand that can own/anchor the cursor), left =
-   secondary. No first-activated-hand logic, no handoff, no left fallback.
+6. Latched hand roles: exactly one physical hand owns the pointer/cursor anchor, the other owns
+   secondary gestures. Right is the pointer at startup; roles persist across resets and swap
+   ONLY via the explicit dwell latch (`UpdateRoleSwapLatch`: current owner out of zone for
+   `HandSwapDwell`, other hand activated and fully tracked, control on, calibration idle, no
+   grip held). No first-activated-hand logic, no highest-hand logic, no handoff mid-drag.
+   Each hand has its own calibrated mapping geometry; an uncalibrated hand uses the original.
 7. Secondary gestures only via `SecondaryGestureArmed` (the clutch). Don't scatter left-hand
    `Closed` checks.
 8. Every pointer session goes through `PointerStabilizer` + `SeedSmoothing`. All teardowns
