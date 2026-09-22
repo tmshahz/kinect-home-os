@@ -42,6 +42,9 @@ namespace KinectV2MouseControl
         const double DEFAULT_HAND_RANGE_X = 0.5f;
         const double DEFAULT_HAND_RANGE_Y = 0.3f;
         const double DEFAULT_HAND_CENTER_X = 0f;
+        const double DEFAULT_HAND_COMFORT_CENTER_X = 0f;
+        const double DEFAULT_CALIBRATION_SPREAD_X = -1f;
+        const double DEFAULT_CALIBRATION_SPREAD_Y = -1f;
 
         /// <summary>
         /// Properties that are part of a tuning profile. Changing any of them after a profile
@@ -53,7 +56,8 @@ namespace KinectV2MouseControl
             "PointerSettleTime", "PointerCenterHeight", "ForwardActivationDistance", "ActivationMinHeight",
             "ScrollSpeed", "ScrollCurve", "InvertScroll", "SwipeMinDisplacement", "StationaryLockEnabled",
             "StationaryLockRadius", "StationaryLockDwell", "StationaryBreakoutRadius", "UseCalibratedRange",
-            "HandRangeX", "HandRangeY", "HandCenterX", "HoverRange", "HoverDuration"
+            "HandRangeX", "HandRangeY", "HandCenterX", "HandComfortCenterX",
+            "CalibrationSpreadX", "CalibrationSpreadY", "HoverRange", "HoverDuration"
         };
 
         /// <summary>
@@ -156,6 +160,10 @@ namespace KinectV2MouseControl
                 RaisePropertyChanged("HandRangeX");
                 RaisePropertyChanged("HandRangeY");
                 RaisePropertyChanged("HandCenterX");
+                RaisePropertyChanged("HandComfortCenterX");
+                RaisePropertyChanged("CalibrationSpreadX");
+                RaisePropertyChanged("CalibrationSpreadY");
+                RaisePropertyChanged("CalibrationQualityText");
                 RaisePropertyChanged("UseCalibratedRange");
                 RaisePropertyChanged("PointerCenterHeight");
             }
@@ -331,7 +339,8 @@ namespace KinectV2MouseControl
             s.IsCalibrated = kinectCursor.UseCalibratedRange;
             s.CalibrationStep = d.CalibrationStep;
             s.CalibrationProgress = d.CalibrationHoldProgress;
-            s.CalibrationStepText = DescribeCalibrationStep(d.CalibrationStep);
+            s.CalibrationStepText = DescribeCalibrationStep(d.CalibrationStep,
+                d.CalibrationPass, d.CalibrationPasses);
             s.CalibrationHint = calibrationMessage ?? kinectCursor.CalibrationPrompt;
 
             switch (state)
@@ -425,17 +434,20 @@ namespace KinectV2MouseControl
             return zone + " · open";
         }
 
-        private static string DescribeCalibrationStep(int step)
+        private static string DescribeCalibrationStep(int step, int pass, int passes)
         {
+            string point;
             switch ((CalibrationStep)step)
             {
-                case CalibrationStep.Center: return "1 of 5 · Centre";
-                case CalibrationStep.Left: return "2 of 5 · Left limit";
-                case CalibrationStep.Right: return "3 of 5 · Right limit";
-                case CalibrationStep.Top: return "4 of 5 · Top limit";
-                case CalibrationStep.Bottom: return "5 of 5 · Bottom limit";
+                case CalibrationStep.Center: point = "1 of 5 · Centre"; break;
+                case CalibrationStep.Left: point = "2 of 5 · Left limit"; break;
+                case CalibrationStep.Right: point = "3 of 5 · Right limit"; break;
+                case CalibrationStep.Top: point = "4 of 5 · Top limit"; break;
+                case CalibrationStep.Bottom: point = "5 of 5 · Bottom limit"; break;
                 default: return "";
             }
+
+            return passes > 0 ? point + " · hold " + pass + " of " + passes : point;
         }
 
         protected void RaisePropertyChanged([CallerMemberName] string propertyName = null)
@@ -798,6 +810,64 @@ namespace KinectV2MouseControl
             }
         }
 
+        public double HandComfortCenterX
+        {
+            get
+            {
+                return kinectCursor.HandComfortCenterX;
+            }
+            set
+            {
+                kinectCursor.HandComfortCenterX = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged("CalibrationQualityText");
+            }
+        }
+
+        public double CalibrationSpreadX
+        {
+            get
+            {
+                return kinectCursor.CalibrationSpreadX;
+            }
+            set
+            {
+                kinectCursor.CalibrationSpreadX = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged("CalibrationQualityText");
+            }
+        }
+
+        public double CalibrationSpreadY
+        {
+            get
+            {
+                return kinectCursor.CalibrationSpreadY;
+            }
+            set
+            {
+                kinectCursor.CalibrationSpreadY = value;
+                RaisePropertyChanged();
+                RaisePropertyChanged("CalibrationQualityText");
+            }
+        }
+
+        public string CalibrationQualityText
+        {
+            get
+            {
+                if (CalibrationSpreadX < 0 || CalibrationSpreadY < 0)
+                {
+                    return "Legacy calibration · repeatability was not recorded; recalibrate to measure it";
+                }
+
+                string quality = kinectCursor.IsCalibrationNoisy ? "NOISY - repeat calibration" : "Good agreement";
+                return quality + " · hold spread X " + CalibrationSpreadX.ToString("0.000")
+                    + " m / Y " + CalibrationSpreadY.ToString("0.000") + " m · comfort X "
+                    + HandComfortCenterX.ToString("+0.00;-0.00;0.00") + " m";
+            }
+        }
+
         public string CalibrateButtonText
         {
             get
@@ -1153,6 +1223,9 @@ namespace KinectV2MouseControl
             profile.HandRangeX = HandRangeX;
             profile.HandRangeY = HandRangeY;
             profile.HandCenterX = HandCenterX;
+            profile.HandComfortCenterX = HandComfortCenterX;
+            profile.CalibrationSpreadX = CalibrationSpreadX;
+            profile.CalibrationSpreadY = CalibrationSpreadY;
             return profile;
         }
 
@@ -1187,6 +1260,9 @@ namespace KinectV2MouseControl
             if (p.HandRangeX.HasValue) HandRangeX = p.HandRangeX.Value;
             if (p.HandRangeY.HasValue) HandRangeY = p.HandRangeY.Value;
             if (p.HandCenterX.HasValue) HandCenterX = p.HandCenterX.Value;
+            if (p.HandComfortCenterX.HasValue) HandComfortCenterX = p.HandComfortCenterX.Value;
+            if (p.CalibrationSpreadX.HasValue) CalibrationSpreadX = p.CalibrationSpreadX.Value;
+            if (p.CalibrationSpreadY.HasValue) CalibrationSpreadY = p.CalibrationSpreadY.Value;
             if (p.UseCalibratedRange.HasValue) UseCalibratedRange = p.UseCalibratedRange.Value;
         }
 
@@ -1219,6 +1295,9 @@ namespace KinectV2MouseControl
             HandRangeX = Properties.Settings.Default.HandRangeX;
             HandRangeY = Properties.Settings.Default.HandRangeY;
             HandCenterX = Properties.Settings.Default.HandCenterX;
+            HandComfortCenterX = Properties.Settings.Default.HandComfortCenterX;
+            CalibrationSpreadX = Properties.Settings.Default.CalibrationSpreadX;
+            CalibrationSpreadY = Properties.Settings.Default.CalibrationSpreadY;
             UseCalibratedRange = Properties.Settings.Default.UseCalibratedRange;
 
             reloadLastProfile = Properties.Settings.Default.ReloadLastProfile;
@@ -1288,6 +1367,9 @@ namespace KinectV2MouseControl
             Properties.Settings.Default.HandRangeX = HandRangeX;
             Properties.Settings.Default.HandRangeY = HandRangeY;
             Properties.Settings.Default.HandCenterX = HandCenterX;
+            Properties.Settings.Default.HandComfortCenterX = HandComfortCenterX;
+            Properties.Settings.Default.CalibrationSpreadX = CalibrationSpreadX;
+            Properties.Settings.Default.CalibrationSpreadY = CalibrationSpreadY;
             Properties.Settings.Default.Mode = ControlModeIndex;
             Properties.Settings.Default.ReloadLastProfile = reloadLastProfile;
             if (activeProfileSlot >= 0)
@@ -1324,6 +1406,9 @@ namespace KinectV2MouseControl
                 HandRangeX = DEFAULT_HAND_RANGE_X;
                 HandRangeY = DEFAULT_HAND_RANGE_Y;
                 HandCenterX = DEFAULT_HAND_CENTER_X;
+                HandComfortCenterX = DEFAULT_HAND_COMFORT_CENTER_X;
+                CalibrationSpreadX = DEFAULT_CALIBRATION_SPREAD_X;
+                CalibrationSpreadY = DEFAULT_CALIBRATION_SPREAD_Y;
                 UseCalibratedRange = DEFAULT_USE_CALIBRATED_RANGE;
             });
 

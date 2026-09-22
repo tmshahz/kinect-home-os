@@ -131,6 +131,8 @@ namespace KinectV2MouseControl
         /// hold has progressed, 0-1.
         /// </summary>
         public int CalibrationStep { get; set; }
+        public int CalibrationPass { get; set; }
+        public int CalibrationPasses { get; set; }
         public double CalibrationHoldProgress { get; set; }
         public bool CalibrationWaitingForHand { get; set; }
 

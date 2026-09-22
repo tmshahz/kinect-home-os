@@ -274,6 +274,42 @@ namespace KinectV2MouseControl.Properties {
                 this["HandCenterX"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public double HandComfortCenterX {
+            get {
+                return ((double)(this["HandComfortCenterX"]));
+            }
+            set {
+                this["HandComfortCenterX"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("-1")]
+        public double CalibrationSpreadX {
+            get {
+                return ((double)(this["CalibrationSpreadX"]));
+            }
+            set {
+                this["CalibrationSpreadX"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("-1")]
+        public double CalibrationSpreadY {
+            get {
+                return ((double)(this["CalibrationSpreadY"]));
+            }
+            set {
+                this["CalibrationSpreadY"] = value;
+            }
+        }
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]

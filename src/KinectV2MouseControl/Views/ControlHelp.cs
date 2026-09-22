@@ -247,7 +247,7 @@ namespace KinectV2MouseControl
                 null, null, null, null),
 
             new HelpEntry("Calibrate",
-                "Guided 5-point capture with the RIGHT hand: centre, left, right, top, bottom. Hold each point still until it is captured; the prompt shows progress. Kinect control is paused while capturing; the button cancels. A 5% edge assist is applied so edges are reached just before full stretch.",
+                "Guided 5-point capture with the RIGHT hand: centre, left, right, top, bottom. Each point needs two steady holds separated by relaxing away from it. Samples furthest from the hold median are discarded, and holds over 4 cm apart retry that point. Kinect control is paused while capturing; the button cancels. A 5% edge assist reaches screen edges just before full stretch.",
                 null, null, null, null),
 
             new HelpEntry("Profiles",

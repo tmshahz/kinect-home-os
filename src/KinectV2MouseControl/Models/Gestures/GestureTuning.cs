@@ -44,6 +44,68 @@ namespace KinectV2MouseControl
         /// </summary>
         public double PointerReleaseGrace { get; set; } = 0.35;
 
+        // ---- Guided calibration -----------------------------------------------------------
+
+        /// <summary>
+        /// Seconds one calibration pose must remain steady before it becomes a candidate.
+        /// Longer gathers more samples but makes the ten-hold ritual slower.
+        /// </summary>
+        public double CalibrationHoldDuration { get; set; } = 0.60;
+
+        /// <summary>
+        /// Metres the hand may wander during one calibration hold before the hold restarts.
+        /// Larger is easier to complete but admits more physical tremor into the estimate.
+        /// </summary>
+        public double CalibrationSteadyRadius { get; set; } = 0.03;
+
+        /// <summary>
+        /// Independent holds required for every centre or extent. Two catches pose-to-pose
+        /// variation without turning five guided points into an overly long ritual.
+        /// </summary>
+        public int CalibrationPassesPerPoint { get; set; } = 2;
+
+        /// <summary>
+        /// Metres the hand must leave a captured pose before the next pass may start. This
+        /// prevents one long hold being split into two apparently independent measurements.
+        /// </summary>
+        public double CalibrationPassResetDistance { get; set; } = 0.05;
+
+        /// <summary>
+        /// Largest difference allowed between the independent measurements of one point.
+        /// Larger accepts less repeatable poses; smaller asks the user to retry more often.
+        /// </summary>
+        public double CalibrationAgreementTolerance { get; set; } = 0.04;
+
+        /// <summary>
+        /// Fraction of samples furthest from a hold's coordinate median that are discarded
+        /// before averaging. Higher rejects more tremor but leaves fewer samples.
+        /// </summary>
+        public double CalibrationOutlierTrimFraction { get; set; } = 0.20;
+
+        /// <summary>
+        /// Minimum distance of an extent from the captured comfort centre in its direction.
+        /// Larger demands more reach before a left/right/top/bottom hold can begin.
+        /// </summary>
+        public double CalibrationMinimumExtent { get; set; } = 0.08;
+
+        /// <summary>
+        /// Fraction removed from each side of the agreed extents. Higher reaches screen edges
+        /// sooner but increases mapping gain; lower uses more of the captured reach.
+        /// </summary>
+        public double CalibrationEdgeAssist { get; set; } = 0.05;
+
+        /// <summary>
+        /// Per-axis disagreement at or above this value is shown as noisy even though it is
+        /// still inside the hard agreement gate. Lower warns sooner; higher hides more spread.
+        /// </summary>
+        public double CalibrationNoisySpread { get; set; } = 0.025;
+
+        /// <summary>
+        /// Fixed storage available for one hold. Raising it permits longer holds or faster
+        /// sources; lowering it reduces the small one-time calibration buffer.
+        /// </summary>
+        public int CalibrationMaxHoldSamples { get; set; } = 64;
+
         // ---- Lasso -> right click ---------------------------------------------------------
 
         /// <summary>

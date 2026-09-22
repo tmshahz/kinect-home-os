@@ -42,6 +42,9 @@ namespace KinectV2MouseControl
         [DataMember(EmitDefaultValue = false)] public double? HandRangeX;
         [DataMember(EmitDefaultValue = false)] public double? HandRangeY;
         [DataMember(EmitDefaultValue = false)] public double? HandCenterX;
+        [DataMember(EmitDefaultValue = false)] public double? HandComfortCenterX;
+        [DataMember(EmitDefaultValue = false)] public double? CalibrationSpreadX;
+        [DataMember(EmitDefaultValue = false)] public double? CalibrationSpreadY;
     }
 
     [DataContract]

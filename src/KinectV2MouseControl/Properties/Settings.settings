@@ -65,6 +65,15 @@
     <Setting Name="HandCenterX" Type="System.Double" Scope="User">
       <Value Profile="(Default)">0</Value>
     </Setting>
+    <Setting Name="HandComfortCenterX" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">0</Value>
+    </Setting>
+    <Setting Name="CalibrationSpreadX" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">-1</Value>
+    </Setting>
+    <Setting Name="CalibrationSpreadY" Type="System.Double" Scope="User">
+      <Value Profile="(Default)">-1</Value>
+    </Setting>
     <Setting Name="ScrollCurve" Type="System.Double" Scope="User">
       <Value Profile="(Default)">1.5</Value>
     </Setting>

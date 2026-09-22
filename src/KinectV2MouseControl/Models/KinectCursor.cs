@@ -15,9 +15,8 @@ namespace KinectV2MouseControl
         private DesktopLayout desktop;
 
         private readonly StationaryLock stationaryLock = new StationaryLock();
-        private readonly PointerCalibration calibration = new PointerCalibration();
-
         private readonly GestureTuning tuning = new GestureTuning();
+        private readonly PointerCalibration calibration;
         private readonly ActionRouter actionRouter = new ActionRouter();
         private readonly GestureContext gestureContext = new GestureContext();
         private readonly GestureEngine gestureEngine;
@@ -398,7 +397,8 @@ namespace KinectV2MouseControl
             UpdateOutputLoopState();
             UpdateCalibrationDiagnostics();
             RuntimeLog.Write("Calibration started");
-            ActivityLog.Post(ActivityKind.Calibration, "Calibration started", "Guided 5-point capture with the right hand", "control center");
+            ActivityLog.Post(ActivityKind.Calibration, "Calibration started",
+                "Five points, two independent holds each, with the right hand", "control center");
             return true;
         }
 
@@ -463,10 +463,13 @@ namespace KinectV2MouseControl
             Diagnostics.CalibrationStep = calibration.IsCapturing ? (int)calibration.Step : 0;
             Diagnostics.CalibrationHoldProgress = calibration.HoldProgress;
             Diagnostics.CalibrationWaitingForHand = calibration.IsWaitingForHand;
+            Diagnostics.CalibrationPass = calibration.IsCapturing ? calibration.CurrentPass : 0;
+            Diagnostics.CalibrationPasses = calibration.PassesPerPoint;
 
             if (calibration.IsCapturing)
             {
-                Diagnostics.Calibration = "CAPTURING step " + calibration.Step;
+                Diagnostics.Calibration = "CAPTURING step " + calibration.Step + " hold "
+                    + calibration.CurrentPass + "/" + calibration.PassesPerPoint;
                 return;
             }
 
@@ -474,6 +477,11 @@ namespace KinectV2MouseControl
                 ? "On  X " + calibration.HandRangeX.ToString("0.00")
                     + " Y " + calibration.HandRangeY.ToString("0.00")
                     + " m  cX " + calibration.HandCenterX.ToString("+0.00;-0.00")
+                    + "  comfort " + calibration.HandComfortCenterX.ToString("+0.00;-0.00")
+                    + "  spread " + (calibration.HasCalibrationQuality
+                        ? calibration.CalibrationSpreadX.ToString("0.000") + "/"
+                            + calibration.CalibrationSpreadY.ToString("0.000")
+                        : "n/a")
                     + "  ptrH " + tuning.PointerCenterHeight.ToString("0.00")
                 : "Off (uniform scale x" + moveScale.ToString("0.00") + ")";
         }
@@ -688,6 +696,53 @@ namespace KinectV2MouseControl
             }
         }
 
+        public double HandComfortCenterX
+        {
+            get
+            {
+                return calibration.HandComfortCenterX;
+            }
+            set
+            {
+                calibration.HandComfortCenterX = value;
+                UpdateCalibrationDiagnostics();
+            }
+        }
+
+        public double CalibrationSpreadX
+        {
+            get
+            {
+                return calibration.CalibrationSpreadX;
+            }
+            set
+            {
+                calibration.CalibrationSpreadX = value;
+                UpdateCalibrationDiagnostics();
+            }
+        }
+
+        public double CalibrationSpreadY
+        {
+            get
+            {
+                return calibration.CalibrationSpreadY;
+            }
+            set
+            {
+                calibration.CalibrationSpreadY = value;
+                UpdateCalibrationDiagnostics();
+            }
+        }
+
+        public bool IsCalibrationNoisy
+        {
+            get
+            {
+                return calibration.IsCalibrationNoisy;
+            }
+        }
+
         public bool IsCalibrating
         {
             get
@@ -863,6 +918,8 @@ namespace KinectV2MouseControl
 
         public KinectCursor()
         {
+            calibration = new PointerCalibration(tuning);
+
             // Physical-pixel geometry of the whole virtual desktop, which is the coordinate
             // space SetCursorPos works in. Replaces WPF's primary-screen-only, DPI-scaled values.
             desktop = DesktopLayout.Capture();
