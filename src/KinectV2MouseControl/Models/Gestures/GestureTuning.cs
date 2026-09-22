@@ -38,11 +38,80 @@ namespace KinectV2MouseControl
         public double ActivationReleaseMargin { get; set; } = 0.12;
 
         /// <summary>
-        /// Seconds an active pointer session remains alive after the right hand leaves the
+        /// Seconds an active pointer session remains alive after the pointer hand leaves the
         /// activation zone. The cursor target is held and all grips are released during this
         /// window, so a brief boundary crossing does not force a new stabilization and snap.
         /// </summary>
         public double PointerReleaseGrace { get; set; } = 0.35;
+
+        /// <summary>
+        /// Seconds the current pointer hand must remain outside its activation zone before an
+        /// activated, fully tracked opposite hand may take the role. This clock overlaps the
+        /// shorter release grace. Higher makes swaps more deliberate; lower changes sooner.
+        /// </summary>
+        public double HandSwapDwell { get; set; } = 0.50;
+
+        // ---- Guided calibration -----------------------------------------------------------
+
+        /// <summary>
+        /// Seconds one calibration pose must remain steady before it becomes a candidate.
+        /// Longer gathers more samples but makes the ten-hold ritual slower.
+        /// </summary>
+        public double CalibrationHoldDuration { get; set; } = 0.60;
+
+        /// <summary>
+        /// Metres the hand may wander during one calibration hold before the hold restarts.
+        /// Larger is easier to complete but admits more physical tremor into the estimate.
+        /// </summary>
+        public double CalibrationSteadyRadius { get; set; } = 0.03;
+
+        /// <summary>
+        /// Independent holds required for every centre or extent. Two catches pose-to-pose
+        /// variation without turning five guided points into an overly long ritual.
+        /// </summary>
+        public int CalibrationPassesPerPoint { get; set; } = 2;
+
+        /// <summary>
+        /// Metres the hand must leave a captured pose before the next pass may start. This
+        /// prevents one long hold being split into two apparently independent measurements.
+        /// </summary>
+        public double CalibrationPassResetDistance { get; set; } = 0.05;
+
+        /// <summary>
+        /// Largest difference allowed between the independent measurements of one point.
+        /// Larger accepts less repeatable poses; smaller asks the user to retry more often.
+        /// </summary>
+        public double CalibrationAgreementTolerance { get; set; } = 0.04;
+
+        /// <summary>
+        /// Fraction of samples furthest from a hold's coordinate median that are discarded
+        /// before averaging. Higher rejects more tremor but leaves fewer samples.
+        /// </summary>
+        public double CalibrationOutlierTrimFraction { get; set; } = 0.20;
+
+        /// <summary>
+        /// Minimum distance of an extent from the captured comfort centre in its direction.
+        /// Larger demands more reach before a left/right/top/bottom hold can begin.
+        /// </summary>
+        public double CalibrationMinimumExtent { get; set; } = 0.08;
+
+        /// <summary>
+        /// Fraction removed from each side of the agreed extents. Higher reaches screen edges
+        /// sooner but increases mapping gain; lower uses more of the captured reach.
+        /// </summary>
+        public double CalibrationEdgeAssist { get; set; } = 0.05;
+
+        /// <summary>
+        /// Per-axis disagreement at or above this value is shown as noisy even though it is
+        /// still inside the hard agreement gate. Lower warns sooner; higher hides more spread.
+        /// </summary>
+        public double CalibrationNoisySpread { get; set; } = 0.025;
+
+        /// <summary>
+        /// Fixed storage available for one hold. Raising it permits longer holds or faster
+        /// sources; lowering it reduces the small one-time calibration buffer.
+        /// </summary>
+        public int CalibrationMaxHoldSamples { get; set; } = 64;
 
         // ---- Lasso -> right click ---------------------------------------------------------
 
@@ -65,13 +134,13 @@ namespace KinectV2MouseControl
         // ---- Secondary clutch (left fist) ---------------------------------------------------
 
         /// <summary>
-        /// Seconds a confident Closed left hand must hold before the clutch engages. Short, so
+        /// Seconds a confident Closed secondary hand must hold before the clutch engages. Short, so
         /// the clutch feels immediate, but long enough to ignore a single stray Closed frame.
         /// </summary>
         public double ClutchEngageDuration { get; set; } = 0.10;
 
         /// <summary>
-        /// Seconds an Open left hand must hold before the clutch releases. Slightly longer than
+        /// Seconds an Open secondary hand must hold before the clutch releases. Slightly longer than
         /// engaging, so a flicker while the fist moves does not drop a scroll mid-gesture.
         /// </summary>
         public double ClutchReleaseDuration { get; set; } = 0.15;
@@ -86,7 +155,7 @@ namespace KinectV2MouseControl
         // ---- Scroll -----------------------------------------------------------------------
 
         /// <summary>
-        /// How long the clutched left hand must be held steady before scroll neutral is
+        /// How long the clutched secondary hand must be held steady before scroll neutral is
         /// captured. Stops a fist that closes mid-movement from capturing a neutral it has
         /// already left behind.
         /// </summary>
@@ -219,7 +288,7 @@ namespace KinectV2MouseControl
         // ---- Pointer session stabilization --------------------------------------------------
 
         /// <summary>
-        /// Seconds of consistently good right-hand samples required before a pointer session
+        /// Seconds of consistently good pointer-hand samples required before a pointer session
         /// starts driving the cursor. Applies on startup and on every reacquisition.
         /// </summary>
         public double PointerSettleTime { get; set; } = 0.25;

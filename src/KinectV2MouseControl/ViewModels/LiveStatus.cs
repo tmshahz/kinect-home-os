@@ -17,12 +17,12 @@ namespace KinectV2MouseControl
         Standby,
 
         /// <summary>
-        /// Control on, waiting for the right hand.
+        /// Control on, waiting for the latched pointer hand.
         /// </summary>
         Ready,
 
         /// <summary>
-        /// The right hand is driving the cursor.
+        /// The latched pointer hand is driving the cursor.
         /// </summary>
         Active
     }
@@ -111,6 +111,12 @@ namespace KinectV2MouseControl
         private string pointerSessionText = "Waiting";
         public string PointerSessionText { get { return pointerSessionText; } set { Set(ref pointerSessionText, value); } }
 
+        private string pointerHandName = "Right";
+        public string PointerHandName { get { return pointerHandName; } set { Set(ref pointerHandName, value); } }
+
+        private string secondaryHandName = "Left";
+        public string SecondaryHandName { get { return secondaryHandName; } set { Set(ref secondaryHandName, value); } }
+
         private bool isPointerActive;
         public bool IsPointerActive { get { return isPointerActive; } set { Set(ref isPointerActive, value); } }
 
@@ -151,6 +157,9 @@ namespace KinectV2MouseControl
 
         private bool rightHandLasso;
         public bool RightHandLasso { get { return rightHandLasso; } set { Set(ref rightHandLasso, value); } }
+
+        private bool leftHandLasso;
+        public bool LeftHandLasso { get { return leftHandLasso; } set { Set(ref leftHandLasso, value); } }
 
         private string rightHandSummary = "Not tracked";
         public string RightHandSummary { get { return rightHandSummary; } set { Set(ref rightHandSummary, value); } }

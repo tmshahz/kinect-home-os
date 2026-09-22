@@ -14,94 +14,93 @@ namespace KinectV2MouseControl
     }
 
     /// <summary>
-    /// Describes the patch of air the hand actually moves through, so it can be mapped onto the
-    /// whole virtual desktop without exaggerated reach.
+    /// Describes the patch of air the pointer hand moves through and records a repeatable
+    /// guided capture of that patch.
     ///
-    /// The original mapping scales both axes by one factor (ScaleAlignment.LongerRange), which
-    /// ties vertical reach to horizontal reach. On a single 16:9 screen that is fine. Across two
-    /// monitors side by side the desktop is roughly twice as wide, so covering it horizontally
-    /// demands close to a full arm span, while the same factor makes the vertical axis so
-    /// sensitive that it is hard to aim.
-    ///
-    /// Calibrated mode replaces that with an explicit input rectangle and independent per-axis
-    /// scaling, so horizontal and vertical reach are chosen separately. It is opt-in: with
-    /// UseCalibratedRange off the mapping is bit-for-bit the original one. In calibrated mode
-    /// the rectangle alone defines the scale - Movement Scale is not applied on top of it - so
-    /// the comfortable extents always map onto the desktop edges.
-    ///
-    /// Everything here is in body-relative metres, measured from SpineBase, so the comfortable
-    /// rectangle travels with the user rather than being anchored to the room. No assumption is
-    /// made about how the sensor is mounted, or about which monitor is primary: the rectangle
-    /// maps onto the whole virtual desktop bounding box.
+    /// Calibrated mode remains a single linear mapping per axis. The agreed left/right and
+    /// top/bottom extents define that rectangle; the user's separately captured comfort centre
+    /// is retained as useful posture data without introducing a gain change around the centre.
     /// </summary>
     public class PointerCalibration
     {
         /// <summary>
-        /// Guards against a degenerate rectangle from a mis-run calibration, which would
-        /// otherwise divide by something near zero and send the cursor to infinity.
+        /// Guards against a degenerate rectangle from a mis-run calibration.
         /// </summary>
         private const double MIN_RANGE = 0.05;
 
-        /// <summary>
-        /// How far the hand may drift while a guided point is being held, metres.
-        /// </summary>
-        private const double STEADY_RADIUS = 0.03;
+        private readonly GestureTuning tuning;
+        private readonly MVector2[] holdSamples;
+        private readonly double[] sampleX;
+        private readonly double[] sampleY;
+        private readonly double[] sampleDistance;
+        private readonly MVector2[,] capturedPasses;
 
-        /// <summary>
-        /// How long a guided point must be held steady before it is captured, seconds.
-        /// </summary>
-        private const double STEADY_HOLD = 0.6;
+        public PointerCalibration(GestureTuning tuning)
+        {
+            this.tuning = tuning;
 
-        /// <summary>
-        /// Minimum distance of an extent from the captured centre, metres, in the step's own
-        /// direction. Stops the previous point being captured again because the hand has not
-        /// moved yet, and rejects an extent on the wrong side of centre.
-        /// </summary>
-        private const double MIN_EXTENT_FROM_CENTER = 0.08;
-
-        /// <summary>
-        /// Fraction trimmed off each side of the captured extents. The desktop edge is then
-        /// reached a little before the hand is at its comfortable limit, which makes corners
-        /// easy to hit even with filtering lag, instead of demanding a full stretch every time.
-        /// </summary>
-        private const double EDGE_ASSIST = 0.05;
+            int sampleCapacity = Math.Max(8, tuning.CalibrationMaxHoldSamples);
+            int passCapacity = Math.Max(2, tuning.CalibrationPassesPerPoint);
+            holdSamples = new MVector2[sampleCapacity];
+            sampleX = new double[sampleCapacity];
+            sampleY = new double[sampleCapacity];
+            sampleDistance = new double[sampleCapacity];
+            capturedPasses = new MVector2[5, passCapacity];
+        }
 
         /// <summary>
         /// When off, the original uniform-scale mapping is used unchanged.
         /// </summary>
         public bool UseCalibratedRange { get; set; }
 
-        /// <summary>
-        /// Full width, in metres, of the comfortable hand rectangle. Maps to the full width of
-        /// the virtual desktop.
-        /// </summary>
         public double HandRangeX { get; set; } = 0.50;
 
-        /// <summary>
-        /// Full height, in metres, of the comfortable hand rectangle.
-        /// </summary>
         public double HandRangeY { get; set; } = 0.30;
 
         /// <summary>
-        /// Sideways shift of the rectangle's centre, in metres, on top of the existing per-hand
-        /// centring. Positive moves the comfortable zone to the user's right.
+        /// Geometric centre of the agreed left/right extents. This remains the centre of the
+        /// one-piece linear map so there is no gain transition in the most-used area.
         /// </summary>
         public double HandCenterX { get; set; }
 
         /// <summary>
-        /// The vertical centre is deliberately not stored here. It is already expressed by
-        /// GestureTuning.PointerCenterHeight, which the pointer mapping subtracts before this
-        /// rectangle is applied, so the rectangle is always centred on zero vertically. Keeping
-        /// one owner for that value stops the two from drifting apart.
+        /// Where the user naturally pointed at the desktop centre. Stored separately from the
+        /// geometric midpoint so posture drift and asymmetric reach are visible and reusable.
         /// </summary>
+        public double HandComfortCenterX { get; set; }
+
+        /// <summary>
+        /// Worst horizontal disagreement between the independent holds, in metres.
+        /// </summary>
+        public double CalibrationSpreadX { get; set; } = -1;
+
+        /// <summary>
+        /// Worst vertical disagreement between the independent holds, in metres.
+        /// </summary>
+        public double CalibrationSpreadY { get; set; } = -1;
+
+        public bool HasCalibrationQuality
+        {
+            get
+            {
+                return CalibrationSpreadX >= 0 && CalibrationSpreadY >= 0;
+            }
+        }
+
+        public bool IsCalibrationNoisy
+        {
+            get
+            {
+                return HasCalibrationQuality && (CalibrationSpreadX >= tuning.CalibrationNoisySpread
+                    || CalibrationSpreadY >= tuning.CalibrationNoisySpread);
+            }
+        }
+
         public MRect BuildInputRect()
         {
             double halfWidth = Math.Max(HandRangeX, MIN_RANGE) * 0.5;
             double halfHeight = Math.Max(HandRangeY, MIN_RANGE) * 0.5;
 
-            // Top above bottom, matching the original gesture rect's sign convention: that is
-            // what gives the mapping a negative vertical scale, so raising a hand raises the
-            // cursor rather than lowering it.
             return new MRect(
                 HandCenterX - halfWidth,
                 halfHeight,
@@ -110,27 +109,17 @@ namespace KinectV2MouseControl
         }
 
         // ---- Guided capture ------------------------------------------------------------------
-        //
-        // The earlier free sweep took the min/max of every sample, so a single noisy frame or a
-        // momentary overreach set the edge, and results were hard to reproduce. The guided flow
-        // instead asks for five held points - centre, left, right, top, bottom - each captured
-        // as the average of a steady hold, and each validated to lie on the correct side of the
-        // centre. Only the right (pointer) hand is sampled, and only while it is inside the
-        // activation zone, so the captured range is by construction one that can actually be
-        // used for pointing.
-        //
-        // The mapping stays linear per axis: the rectangle runs from the left extent to the
-        // right extent and from the bottom to the top. A piecewise mapping pinning the captured
-        // centre to the desktop centre was considered and rejected - it puts a change of gain
-        // right in the middle of the most-used area. The centre point is used to validate the
-        // extents and is reported in diagnostics.
 
         private MVector2 anchor;
         private bool hasAnchor;
         private double held;
-        private MVector2 heldSum;
         private int heldCount;
         private bool isWrongSide;
+
+        private int passCount;
+        private bool awaitingReposition;
+        private MVector2 repositionOrigin;
+        private string retryMessage = "";
 
         private MVector2 capturedCenter;
         private double capturedLeft;
@@ -140,9 +129,6 @@ namespace KinectV2MouseControl
 
         public CalibrationStep Step { get; private set; }
 
-        /// <summary>
-        /// True while guided points are being recorded from live hand movement.
-        /// </summary>
         public bool IsCapturing
         {
             get
@@ -151,9 +137,6 @@ namespace KinectV2MouseControl
             }
         }
 
-        /// <summary>
-        /// True once all five points are in and the capture is waiting to be applied.
-        /// </summary>
         public bool IsCaptureComplete
         {
             get
@@ -162,71 +145,67 @@ namespace KinectV2MouseControl
             }
         }
 
-        /// <summary>
-        /// Outcome of the last finished or cancelled capture, for the UI.
-        /// </summary>
         public string LastResultText { get; private set; } = "";
 
-        /// <summary>
-        /// Progress of the current steady hold, 0-1, for the control center's progress ring.
-        /// Zero whenever no hold is in progress.
-        /// </summary>
         public double HoldProgress
         {
             get
             {
-                if (!IsCapturing || !hasAnchor || isWrongSide)
+                if (!IsCapturing || !hasAnchor || isWrongSide || awaitingReposition)
                 {
                     return 0;
                 }
 
-                return Math.Min(1, held / STEADY_HOLD);
+                return Math.Min(1, held / tuning.CalibrationHoldDuration);
             }
         }
 
-        /// <summary>
-        /// True while capturing but the right hand has not yet entered the control zone.
-        /// </summary>
         public bool IsWaitingForHand
         {
             get
             {
-                return IsCapturing && !hasAnchor;
+                return IsCapturing && !hasAnchor && !awaitingReposition;
             }
         }
 
-        /// <summary>
-        /// Instruction for the current step, for the UI.
-        /// </summary>
+        public int CurrentPass
+        {
+            get
+            {
+                return Math.Min(passCount + 1, tuning.CalibrationPassesPerPoint);
+            }
+        }
+
+        public int PassesPerPoint
+        {
+            get
+            {
+                return tuning.CalibrationPassesPerPoint;
+            }
+        }
+
         public string PromptText
         {
             get
             {
-                string instruction;
-                switch (Step)
+                string instruction = GetInstruction();
+                if (instruction.Length == 0)
                 {
-                    case CalibrationStep.Center:
-                        instruction = "1/5 CENTRE: point RIGHT hand comfortably at the middle of the desktop";
-                        break;
-                    case CalibrationStep.Left:
-                        instruction = "2/5 LEFT: hold RIGHT hand at your comfortable LEFT limit";
-                        break;
-                    case CalibrationStep.Right:
-                        instruction = "3/5 RIGHT: hold RIGHT hand at your comfortable RIGHT limit";
-                        break;
-                    case CalibrationStep.Top:
-                        instruction = "4/5 TOP: hold RIGHT hand at your comfortable TOP limit";
-                        break;
-                    case CalibrationStep.Bottom:
-                        instruction = "5/5 BOTTOM: hold RIGHT hand at your comfortable BOTTOM limit (still raised)";
-                        break;
-                    default:
-                        return LastResultText;
+                    return LastResultText;
+                }
+
+                if (awaitingReposition)
+                {
+                    string prefix = retryMessage.Length == 0
+                        ? "Hold " + passCount + "/" + tuning.CalibrationPassesPerPoint + " captured. "
+                        : retryMessage + " ";
+                    return instruction + "  - " + prefix
+                        + "relax away from this point, then return";
                 }
 
                 if (!hasAnchor)
                 {
-                    return instruction + "  - raise right hand into the control zone";
+                    return instruction + "  - raise the pointer hand into the control zone";
                 }
 
                 if (isWrongSide)
@@ -234,20 +213,43 @@ namespace KinectV2MouseControl
                     return instruction + "  - move further from centre";
                 }
 
-                int percent = (int)Math.Min(100, held / STEADY_HOLD * 100);
-                return instruction + "  - hold still " + percent + "%";
+                int percent = (int)Math.Min(100, held / tuning.CalibrationHoldDuration * 100);
+                return instruction + "  - hold " + CurrentPass + "/"
+                    + tuning.CalibrationPassesPerPoint + " still " + percent + "%";
+            }
+        }
+
+        private string GetInstruction()
+        {
+            switch (Step)
+            {
+                case CalibrationStep.Center:
+                    return "1/5 CENTRE: point the POINTER hand comfortably at the middle of the desktop";
+                case CalibrationStep.Left:
+                    return "2/5 LEFT: hold the POINTER hand at your comfortable LEFT limit";
+                case CalibrationStep.Right:
+                    return "3/5 RIGHT: hold the POINTER hand at your comfortable RIGHT limit";
+                case CalibrationStep.Top:
+                    return "4/5 TOP: hold the POINTER hand at your comfortable TOP limit";
+                case CalibrationStep.Bottom:
+                    return "5/5 BOTTOM: hold the POINTER hand at your comfortable BOTTOM limit (still raised)";
+                default:
+                    return "";
             }
         }
 
         public void BeginCapture()
         {
             Step = CalibrationStep.Center;
+            passCount = 0;
+            awaitingReposition = false;
+            retryMessage = "";
             ClearHold();
         }
 
         /// <summary>
-        /// Feeds one right-hand position, in the same pointer-mapping frame the rectangle
-        /// describes: body-relative and already offset by PointerCenterHeight.
+        /// Feeds one fully tracked pointer-hand position in the mapping frame. A hold is kept
+        /// allocation-free; robust reduction happens only when its timer completes.
         /// </summary>
         public void AddSample(MVector2 mappingFramePosition, double deltaTime)
         {
@@ -256,44 +258,135 @@ namespace KinectV2MouseControl
                 return;
             }
 
-            if (!hasAnchor || (mappingFramePosition - anchor).Length() > STEADY_RADIUS)
+            if (awaitingReposition)
+            {
+                if (HasRepositioned(mappingFramePosition))
+                {
+                    awaitingReposition = false;
+                    retryMessage = "";
+                    ClearHold();
+                }
+
+                return;
+            }
+
+            if (!hasAnchor || (mappingFramePosition - anchor).Length() > tuning.CalibrationSteadyRadius)
             {
                 anchor = mappingFramePosition;
                 hasAnchor = true;
                 held = 0;
-                heldSum = mappingFramePosition;
-                heldCount = 1;
+                heldCount = 0;
+                AddHoldSample(mappingFramePosition);
                 isWrongSide = !IsOnCorrectSide(mappingFramePosition);
                 return;
             }
 
             held += deltaTime;
-            heldSum += mappingFramePosition;
-            heldCount++;
+            AddHoldSample(mappingFramePosition);
 
-            MVector2 mean = heldSum * (1.0 / heldCount);
-            isWrongSide = !IsOnCorrectSide(mean);
-
+            MVector2 runningMean = GetSimpleHoldMean();
+            isWrongSide = !IsOnCorrectSide(runningMean);
             if (isWrongSide)
             {
                 held = 0;
+                heldCount = 0;
+                AddHoldSample(mappingFramePosition);
                 return;
             }
 
-            if (held >= STEADY_HOLD)
+            if (held >= tuning.CalibrationHoldDuration)
             {
-                Record(mean);
+                RecordPass(GetRobustHoldMean());
                 ClearHold();
             }
         }
 
-        /// <summary>
-        /// The pointer hand is not usable this frame (down, untracked, inferred). The hold in
-        /// progress is abandoned so a point is only ever captured from a continuous steady hold.
-        /// </summary>
         public void NoSample()
         {
             ClearHold();
+        }
+
+        private void AddHoldSample(MVector2 position)
+        {
+            if (heldCount < holdSamples.Length)
+            {
+                holdSamples[heldCount++] = position;
+            }
+            else
+            {
+                // A configured hold longer than the buffer keeps the newest evidence.
+                for (int i = 1; i < holdSamples.Length; i++)
+                {
+                    holdSamples[i - 1] = holdSamples[i];
+                }
+
+                holdSamples[holdSamples.Length - 1] = position;
+            }
+        }
+
+        private MVector2 GetSimpleHoldMean()
+        {
+            MVector2 sum = MVector2.Zero;
+            for (int i = 0; i < heldCount; i++)
+            {
+                sum += holdSamples[i];
+            }
+
+            return heldCount == 0 ? anchor : sum * (1.0 / heldCount);
+        }
+
+        /// <summary>
+        /// Discards the fraction of samples furthest from the coordinate median, then averages
+        /// the rest. One-frame excursions inside the steady radius therefore cannot pull the
+        /// result as a plain mean did.
+        /// </summary>
+        private MVector2 GetRobustHoldMean()
+        {
+            if (heldCount == 0)
+            {
+                return anchor;
+            }
+
+            for (int i = 0; i < heldCount; i++)
+            {
+                sampleX[i] = holdSamples[i].X;
+                sampleY[i] = holdSamples[i].Y;
+            }
+
+            Array.Sort(sampleX, 0, heldCount);
+            Array.Sort(sampleY, 0, heldCount);
+            MVector2 median = new MVector2(GetMedian(sampleX, heldCount), GetMedian(sampleY, heldCount));
+
+            for (int i = 0; i < heldCount; i++)
+            {
+                sampleDistance[i] = (holdSamples[i] - median).Length();
+            }
+
+            Array.Sort(sampleDistance, 0, heldCount);
+            double trim = Math.Max(0, Math.Min(0.45, tuning.CalibrationOutlierTrimFraction));
+            int keptTarget = Math.Max(1, (int)Math.Ceiling(heldCount * (1 - trim)));
+            double distanceLimit = sampleDistance[keptTarget - 1];
+
+            MVector2 sum = MVector2.Zero;
+            int kept = 0;
+            for (int i = 0; i < heldCount; i++)
+            {
+                if ((holdSamples[i] - median).Length() <= distanceLimit)
+                {
+                    sum += holdSamples[i];
+                    kept++;
+                }
+            }
+
+            return kept == 0 ? median : sum * (1.0 / kept);
+        }
+
+        private static double GetMedian(double[] values, int count)
+        {
+            int middle = count / 2;
+            return count % 2 == 0
+                ? (values[middle - 1] + values[middle]) * 0.5
+                : values[middle];
         }
 
         private bool IsOnCorrectSide(MVector2 position)
@@ -301,19 +394,101 @@ namespace KinectV2MouseControl
             switch (Step)
             {
                 case CalibrationStep.Left:
-                    return position.X <= capturedCenter.X - MIN_EXTENT_FROM_CENTER;
+                    return position.X <= capturedCenter.X - tuning.CalibrationMinimumExtent;
                 case CalibrationStep.Right:
-                    return position.X >= capturedCenter.X + MIN_EXTENT_FROM_CENTER;
+                    return position.X >= capturedCenter.X + tuning.CalibrationMinimumExtent;
                 case CalibrationStep.Top:
-                    return position.Y >= capturedCenter.Y + MIN_EXTENT_FROM_CENTER;
+                    return position.Y >= capturedCenter.Y + tuning.CalibrationMinimumExtent;
                 case CalibrationStep.Bottom:
-                    return position.Y <= capturedCenter.Y - MIN_EXTENT_FROM_CENTER;
+                    return position.Y <= capturedCenter.Y - tuning.CalibrationMinimumExtent;
                 default:
                     return true;
             }
         }
 
-        private void Record(MVector2 position)
+        private bool HasRepositioned(MVector2 position)
+        {
+            double required = tuning.CalibrationPassResetDistance;
+            switch (Step)
+            {
+                case CalibrationStep.Left:
+                    return position.X - repositionOrigin.X >= required;
+                case CalibrationStep.Right:
+                    return repositionOrigin.X - position.X >= required;
+                case CalibrationStep.Top:
+                    return repositionOrigin.Y - position.Y >= required;
+                case CalibrationStep.Bottom:
+                    return position.Y - repositionOrigin.Y >= required;
+                default:
+                    return (position - repositionOrigin).Length() >= required;
+            }
+        }
+
+        private void RecordPass(MVector2 position)
+        {
+            int point = (int)Step - 1;
+            capturedPasses[point, passCount] = position;
+            passCount++;
+
+            if (passCount < tuning.CalibrationPassesPerPoint)
+            {
+                repositionOrigin = position;
+                awaitingReposition = true;
+                return;
+            }
+
+            double disagreement = GetPassDisagreement(point);
+            if (disagreement > tuning.CalibrationAgreementTolerance)
+            {
+                retryMessage = "Holds differed by " + disagreement.ToString("0.00")
+                    + " m - hold steadier / try again.";
+                repositionOrigin = position;
+                passCount = 0;
+                awaitingReposition = true;
+                return;
+            }
+
+            MVector2 agreed = MVector2.Zero;
+            for (int i = 0; i < tuning.CalibrationPassesPerPoint; i++)
+            {
+                agreed += capturedPasses[point, i];
+            }
+
+            agreed = agreed * (1.0 / tuning.CalibrationPassesPerPoint);
+            RecordAgreedPoint(agreed);
+            passCount = 0;
+            awaitingReposition = false;
+            retryMessage = "";
+        }
+
+        private double GetPassDisagreement(int point)
+        {
+            if (Step == CalibrationStep.Center)
+            {
+                double worst = 0;
+                for (int i = 1; i < tuning.CalibrationPassesPerPoint; i++)
+                {
+                    worst = Math.Max(worst, (capturedPasses[point, i] - capturedPasses[point, 0]).Length());
+                }
+
+                return worst;
+            }
+
+            double minimum = double.MaxValue;
+            double maximum = double.MinValue;
+            for (int i = 0; i < tuning.CalibrationPassesPerPoint; i++)
+            {
+                MVector2 pass = capturedPasses[point, i];
+                double value = Step == CalibrationStep.Left || Step == CalibrationStep.Right
+                    ? pass.X : pass.Y;
+                minimum = Math.Min(minimum, value);
+                maximum = Math.Max(maximum, value);
+            }
+
+            return maximum - minimum;
+        }
+
+        private void RecordAgreedPoint(MVector2 position)
         {
             switch (Step)
             {
@@ -344,21 +519,14 @@ namespace KinectV2MouseControl
         {
             hasAnchor = false;
             held = 0;
-            heldSum = MVector2.Zero;
             heldCount = 0;
             isWrongSide = false;
         }
 
         /// <summary>
-        /// Adopts a completed capture.
-        ///
-        /// The vertical centre of the captured extents is folded back into PointerCenterHeight
-        /// rather than stored here, which is why it is returned instead of applied.
+        /// Adopts a completed capture, leaving the previous mapping untouched on rejection.
+        /// The vertical midpoint adjustment is returned because PointerCenterHeight owns it.
         /// </summary>
-        /// <param name="pointerCenterHeightAdjustment">
-        /// Metres to add to PointerCenterHeight so the captured region is vertically centred.
-        /// </param>
-        /// <returns>True when the capture was usable and the ranges were adopted.</returns>
         public bool EndCapture(out double pointerCenterHeightAdjustment)
         {
             pointerCenterHeightAdjustment = 0;
@@ -372,9 +540,8 @@ namespace KinectV2MouseControl
 
             Step = CalibrationStep.None;
 
-            double rangeX = (capturedRight - capturedLeft) * (1 - 2 * EDGE_ASSIST);
-            double rangeY = (capturedTop - capturedBottom) * (1 - 2 * EDGE_ASSIST);
-
+            double rangeX = (capturedRight - capturedLeft) * (1 - 2 * tuning.CalibrationEdgeAssist);
+            double rangeY = (capturedTop - capturedBottom) * (1 - 2 * tuning.CalibrationEdgeAssist);
             if (rangeX < MIN_RANGE || rangeY < MIN_RANGE)
             {
                 LastResultText = "Calibration rejected: range too small - previous mapping kept";
@@ -383,19 +550,49 @@ namespace KinectV2MouseControl
 
             HandRangeX = rangeX;
             HandRangeY = rangeY;
-
-            // Samples arrive in the same frame the rectangle is expressed in, so the midpoint
-            // of the extents is the new centre outright rather than an adjustment to the old one.
             HandCenterX = (capturedLeft + capturedRight) * 0.5;
+            HandComfortCenterX = capturedCenter.X;
             pointerCenterHeightAdjustment = (capturedTop + capturedBottom) * 0.5;
 
+            CalibrationSpreadX = GetAxisSpread(true);
+            CalibrationSpreadY = GetAxisSpread(false);
             UseCalibratedRange = true;
 
+            string quality = IsCalibrationNoisy ? "NOISY - repeat if aiming feels twitchy" : "good agreement";
             LastResultText = "Calibrated: X " + HandRangeX.ToString("0.00") + " m, Y "
                 + HandRangeY.ToString("0.00") + " m, centre X " + HandCenterX.ToString("+0.00;-0.00")
-                + " m (your centre was " + (capturedCenter.X - HandCenterX).ToString("+0.00;-0.00")
-                + " m off the midpoint)";
+                + " m, comfort X " + HandComfortCenterX.ToString("+0.00;-0.00")
+                + " m; spread X/Y " + CalibrationSpreadX.ToString("0.000") + "/"
+                + CalibrationSpreadY.ToString("0.000") + " m (" + quality + ")";
             return true;
+        }
+
+        private double GetAxisSpread(bool horizontal)
+        {
+            double worst = 0;
+            int firstPoint = horizontal ? 0 : 0;
+            int secondPoint = horizontal ? 1 : 3;
+            int thirdPoint = horizontal ? 2 : 4;
+
+            worst = Math.Max(worst, GetPointAxisSpread(firstPoint, horizontal));
+            worst = Math.Max(worst, GetPointAxisSpread(secondPoint, horizontal));
+            worst = Math.Max(worst, GetPointAxisSpread(thirdPoint, horizontal));
+            return worst;
+        }
+
+        private double GetPointAxisSpread(int point, bool horizontal)
+        {
+            double minimum = double.MaxValue;
+            double maximum = double.MinValue;
+            for (int i = 0; i < tuning.CalibrationPassesPerPoint; i++)
+            {
+                MVector2 pass = capturedPasses[point, i];
+                double value = horizontal ? pass.X : pass.Y;
+                minimum = Math.Min(minimum, value);
+                maximum = Math.Max(maximum, value);
+            }
+
+            return maximum - minimum;
         }
 
         public void CancelCapture()
@@ -406,6 +603,9 @@ namespace KinectV2MouseControl
             }
 
             Step = CalibrationStep.None;
+            passCount = 0;
+            awaitingReposition = false;
+            retryMessage = "";
             ClearHold();
         }
     }

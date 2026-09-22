@@ -274,6 +274,138 @@ namespace KinectV2MouseControl.Properties {
                 this["HandCenterX"] = value;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public double HandComfortCenterX {
+            get {
+                return ((double)(this["HandComfortCenterX"]));
+            }
+            set {
+                this["HandComfortCenterX"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("-1")]
+        public double CalibrationSpreadX {
+            get {
+                return ((double)(this["CalibrationSpreadX"]));
+            }
+            set {
+                this["CalibrationSpreadX"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("-1")]
+        public double CalibrationSpreadY {
+            get {
+                return ((double)(this["CalibrationSpreadY"]));
+            }
+            set {
+                this["CalibrationSpreadY"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool LeftHandCalibrated {
+            get {
+                return ((bool)(this["LeftHandCalibrated"]));
+            }
+            set {
+                this["LeftHandCalibrated"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.5")]
+        public double LeftHandRangeX {
+            get {
+                return ((double)(this["LeftHandRangeX"]));
+            }
+            set {
+                this["LeftHandRangeX"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.3")]
+        public double LeftHandRangeY {
+            get {
+                return ((double)(this["LeftHandRangeY"]));
+            }
+            set {
+                this["LeftHandRangeY"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public double LeftHandCenterX {
+            get {
+                return ((double)(this["LeftHandCenterX"]));
+            }
+            set {
+                this["LeftHandCenterX"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0")]
+        public double LeftHandComfortCenterX {
+            get {
+                return ((double)(this["LeftHandComfortCenterX"]));
+            }
+            set {
+                this["LeftHandComfortCenterX"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("-1")]
+        public double LeftCalibrationSpreadX {
+            get {
+                return ((double)(this["LeftCalibrationSpreadX"]));
+            }
+            set {
+                this["LeftCalibrationSpreadX"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("-1")]
+        public double LeftCalibrationSpreadY {
+            get {
+                return ((double)(this["LeftCalibrationSpreadY"]));
+            }
+            set {
+                this["LeftCalibrationSpreadY"] = value;
+            }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.5")]
+        public double LeftPointerCenterHeight {
+            get {
+                return ((double)(this["LeftPointerCenterHeight"]));
+            }
+            set {
+                this["LeftPointerCenterHeight"] = value;
+            }
+        }
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]

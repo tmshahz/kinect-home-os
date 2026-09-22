@@ -3,7 +3,7 @@ using System;
 namespace KinectV2MouseControl
 {
     /// <summary>
-    /// Wheel scrolling driven by the clutched left hand.
+    /// Wheel scrolling driven by the clutched secondary hand.
     ///
     /// Flow:
     ///
@@ -12,7 +12,7 @@ namespace KinectV2MouseControl
     ///     fist moves up / down     -> scroll at a rate set by the offset from neutral
     ///     fist opens               -> clutch releases, scrolling stops, neutral is discarded
     ///
-    /// Nothing happens without the clutch, so an open left hand can move anywhere freely.
+    /// Nothing happens without the clutch, so an open secondary hand can move freely.
     ///
     /// Neutral is captured only once the clutched hand has been steady for ScrollEngageDwell,
     /// as the average height over that dwell. A fist that closes while the hand is still moving
@@ -133,7 +133,7 @@ namespace KinectV2MouseControl
                 return;
             }
 
-            HandSnapshot hand = context.Hands[GestureContext.SecondaryHand];
+            HandSnapshot hand = context.Hands[context.SecondaryHandIndex];
             double deltaTime = context.DeltaTime;
 
             UpdateSmoothedHand(hand, deltaTime);

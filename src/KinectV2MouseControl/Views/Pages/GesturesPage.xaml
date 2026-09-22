@@ -47,12 +47,12 @@
                                      IsChecked="{Binding Engine.ControlModeIndex, Mode=TwoWay, Converter={StaticResource RadioCheckConverter}, ConverterParameter=0}"/>
                     </WrapPanel>
                     <TextBlock Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
-                               Text="Grip to press is the full vocabulary: right fist to click and drag, lasso to right click, left fist clutch for scroll and swipe. The other modes are the original single-purpose modes; the double clap works in all of them."/>
+                               Text="Grip to press is the full vocabulary: pointer-hand fist to click and drag, lasso to right click, secondary-hand fist clutch for scroll and swipe. Lower the pointer hand for 0.5 s while the other hand is raised to swap roles. The double clap works in every active mode."/>
                 </StackPanel>
             </Border>
 
-            <!-- ============================ Right hand ============================ -->
-            <TextBlock Text="RIGHT HAND · POINTER &amp; CLICKS" Style="{StaticResource SectionLabel}"/>
+            <!-- ============================ Pointer hand ============================ -->
+            <TextBlock Text="{Binding Status.PointerHandName, StringFormat=POINTER HAND · {0} · CLICKS}" Style="{StaticResource SectionLabel}"/>
             <UniformGrid Columns="3" Margin="-8,0">
                 <Border Style="{StaticResource GestureCard}" BorderBrush="{Binding Status.IsPointerActive, Converter={StaticResource OnBorderBrush}}">
                     <StackPanel>
@@ -68,7 +68,7 @@
                             </Border>
                         </Grid>
                         <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,0"
-                                   Text="Raise your right hand forward into the control zone. After a short settle the cursor snaps to it and follows. Lower the hand to hand the mouse back."/>
+                                   Text="Raise the pointer hand forward into the control zone. After a short settle it takes the cursor. To swap deliberately, lower it for 0.5 s while the other hand is fully tracked and raised; both hands up never flips roles."/>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource GestureCard}" BorderBrush="{Binding Status.IsGripHeld, Converter={StaticResource OnBorderBrush}}">
@@ -85,7 +85,7 @@
                             </Border>
                         </Grid>
                         <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,0"
-                                   Text="Close the right fist to press the left button, open it to release. The cursor freezes as the fist closes so the click lands where you aimed; keep it closed to drag."/>
+                                   Text="Close the pointer-hand fist to press the left button, open it to release. The cursor freezes as the fist closes so the click lands where you aimed; keep it closed to drag."/>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource GestureCard}" BorderBrush="{Binding Status.IsLassoActive, Converter={StaticResource OnBorderBrush}}">
@@ -107,8 +107,8 @@
                 </Border>
             </UniformGrid>
 
-            <!-- ============================ Left hand ============================ -->
-            <TextBlock Text="LEFT HAND · CLUTCH GESTURES" Style="{StaticResource SectionLabel}"/>
+            <!-- ============================ Secondary hand ============================ -->
+            <TextBlock Text="{Binding Status.SecondaryHandName, StringFormat=SECONDARY HAND · {0} · CLUTCH GESTURES}" Style="{StaticResource SectionLabel}"/>
             <UniformGrid Columns="3" Margin="-8,0">
                 <Border Style="{StaticResource GestureCard}" BorderBrush="{Binding Status.IsClutchArmed, Converter={StaticResource OnBorderBrush}}">
                     <StackPanel>
@@ -124,7 +124,7 @@
                             </Border>
                         </Grid>
                         <TextBlock Style="{StaticResource Text.Caption}" Margin="0,6,0,0"
-                                   Text="Close the left fist inside the control zone to arm. An open left hand does nothing at all, so you can rest it or gesture freely. Opening the fist ends whatever it was doing at once."/>
+                                   Text="Close the secondary-hand fist inside the control zone to arm. An open secondary hand does nothing. Opening the fist ends scrolling or swiping at once."/>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource GestureCard}" BorderBrush="{Binding Status.IsScrolling, Converter={StaticResource OnBorderBrush}}">

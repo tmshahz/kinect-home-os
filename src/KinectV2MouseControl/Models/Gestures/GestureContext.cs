@@ -64,12 +64,12 @@ namespace KinectV2MouseControl
         public const int RightHand = 1;
 
         /// <summary>
-        /// Hand roles are fixed. The right hand is the only hand that can point, click, drag or
-        /// right click; the left hand is the only hand that can scroll or swipe. Neither can
-        /// ever take the other's job, so there is no handoff between them.
+        /// Runtime roles selected by KinectCursor's explicit swap latch. They are fields on
+        /// the reused context, not inferred by recognizers, so every consumer sees exactly one
+        /// pointer hand and the opposite secondary hand for the whole frame.
         /// </summary>
-        public const int PointerHand = RightHand;
-        public const int SecondaryHand = LeftHand;
+        public int PointerHandIndex = RightHand;
+        public int SecondaryHandIndex = LeftHand;
 
         /// <summary>
         /// Real elapsed seconds since the previous frame, from the sensor's own timestamps.
@@ -85,12 +85,12 @@ namespace KinectV2MouseControl
         public bool IsControlEnabled = true;
 
         /// <summary>
-        /// PointerHand while a pointer session is active (stabilized), otherwise NoHand.
+        /// PointerHandIndex while a pointer session is active (stabilized), otherwise NoHand.
         /// </summary>
         public int ControllingHandIndex = NoHand;
 
         /// <summary>
-        /// SecondaryGestureArmed: the left-fist clutch is engaged. Set by the engine before the
+        /// SecondaryGestureArmed: the secondary-hand fist clutch is engaged. Set by the engine before the
         /// secondary recognizers run; scroll and swipe do nothing while it is false.
         /// </summary>
         public bool IsSecondaryGestureArmed;

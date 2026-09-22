@@ -27,6 +27,9 @@ namespace KinectV2MouseControl
         /// Waiting / Stabilizing / Active.
         /// </summary>
         public string PointerSession { get; set; } = "Waiting";
+        public int PointerHandIndex { get; set; } = GestureContext.RightHand;
+        public string PointerHandName { get; set; } = "Right";
+        public string SecondaryHandName { get; set; } = "Left";
 
         public string RightHandState { get; set; } = "-";
         public string LeftHandState { get; set; } = "-";
@@ -100,9 +103,10 @@ namespace KinectV2MouseControl
         public bool RightHandClosed { get; set; }
         public bool LeftHandClosed { get; set; }
         public bool RightHandLasso { get; set; }
+        public bool LeftHandLasso { get; set; }
 
         /// <summary>
-        /// True while a pointer session is Active, i.e. the right hand is driving the cursor.
+        /// True while the latched pointer hand has an Active session.
         /// </summary>
         public bool IsPointerActive { get; set; }
 
@@ -131,6 +135,8 @@ namespace KinectV2MouseControl
         /// hold has progressed, 0-1.
         /// </summary>
         public int CalibrationStep { get; set; }
+        public int CalibrationPass { get; set; }
+        public int CalibrationPasses { get; set; }
         public double CalibrationHoldProgress { get; set; }
         public bool CalibrationWaitingForHand { get; set; }
 
@@ -139,10 +145,11 @@ namespace KinectV2MouseControl
             StringBuilder text = new StringBuilder();
             text.AppendLine("Tracking: " + (IsTracking ? "Yes (" + BodyCount + " body, q " + BodyScore + "/6)" : "No")
                 + "   Control: " + (IsControlEnabled ? "Enabled" : "DISABLED"));
-            text.AppendLine("Pointer (R): " + PointerSession + "   " + PointerState
+            text.AppendLine("Pointer (" + PointerHandName + "): " + PointerSession + "   " + PointerState
                 + "   lock " + LockDisplacement.ToString("0") + " px");
             text.AppendLine("R: " + RightHandState + "   L: " + LeftHandState);
-            text.AppendLine("L clutch: " + ClutchState + "   Secondary: " + SecondaryMode + "   Clap: " + ClapState);
+            text.AppendLine(SecondaryHandName + " clutch: " + ClutchState
+                + "   Secondary: " + SecondaryMode + "   Clap: " + ClapState);
             text.AppendLine("Gesture: " + Gesture + "   Last action: " + LastAction);
             text.AppendLine("Scroll neutral: " + (ScrollNeutral.HasValue
                 ? ScrollNeutral.Value.ToString("0.00") + " m  off " + ScrollOffset.ToString("+0.00;-0.00;0.00")
