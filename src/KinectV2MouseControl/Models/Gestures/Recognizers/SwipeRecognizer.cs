@@ -3,7 +3,7 @@ using System;
 namespace KinectV2MouseControl
 {
     /// <summary>
-    /// Fast horizontal swipe of the clutched left hand, mapped to window switching.
+    /// Fast horizontal swipe of the clutched secondary hand, mapped to window switching.
     ///
     /// A short history of the hand's body-relative position is kept, and every frame the widest
     /// horizontal excursion inside the time window is measured. A swipe is accepted only when
@@ -88,9 +88,10 @@ namespace KinectV2MouseControl
                 cooldownRemaining -= context.DeltaTime;
             }
 
-            // Only a clutched left hand can swipe. Without the clutch, horizontal repositioning
+            // Only a clutched secondary hand can swipe. Without the clutch, repositioning
             // of an open hand is ignored entirely, and releasing the clutch drops the history.
-            int handIndex = context.IsSecondaryGestureArmed ? GestureContext.SecondaryHand : GestureContext.NoHand;
+            int handIndex = context.IsSecondaryGestureArmed
+                ? context.SecondaryHandIndex : GestureContext.NoHand;
             if (handIndex == GestureContext.NoHand || context.SuppressSwipe)
             {
                 ClearSamples();

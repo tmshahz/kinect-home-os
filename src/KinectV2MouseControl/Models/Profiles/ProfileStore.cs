@@ -45,6 +45,14 @@ namespace KinectV2MouseControl
         [DataMember(EmitDefaultValue = false)] public double? HandComfortCenterX;
         [DataMember(EmitDefaultValue = false)] public double? CalibrationSpreadX;
         [DataMember(EmitDefaultValue = false)] public double? CalibrationSpreadY;
+        [DataMember(EmitDefaultValue = false)] public bool? LeftHandCalibrated;
+        [DataMember(EmitDefaultValue = false)] public double? LeftHandRangeX;
+        [DataMember(EmitDefaultValue = false)] public double? LeftHandRangeY;
+        [DataMember(EmitDefaultValue = false)] public double? LeftHandCenterX;
+        [DataMember(EmitDefaultValue = false)] public double? LeftHandComfortCenterX;
+        [DataMember(EmitDefaultValue = false)] public double? LeftCalibrationSpreadX;
+        [DataMember(EmitDefaultValue = false)] public double? LeftCalibrationSpreadY;
+        [DataMember(EmitDefaultValue = false)] public double? LeftPointerCenterHeight;
     }
 
     [DataContract]

@@ -103,7 +103,7 @@
                                 <TextBlock Canvas.Left="20" Canvas.Top="{Binding Displays.ActivationLineY}" Text="activation height" FontSize="38"
                                            Foreground="{StaticResource Brush.Warning}" Margin="0,-58,0,0"/>
 
-                                <!-- Reach rectangle for the right hand -->
+                                <!-- Reach rectangle for the current pointer hand -->
                                 <Rectangle Canvas.Left="{Binding Displays.ReachX}" Canvas.Top="{Binding Displays.ReachY}"
                                            Width="{Binding Displays.ReachWidth}" Height="{Binding Displays.ReachHeight}"
                                            Fill="{StaticResource Brush.AccentFaint}" Stroke="{StaticResource Brush.Accent}" StrokeThickness="5"
@@ -142,11 +142,11 @@
                         <Border Style="{StaticResource Pill}" HorizontalAlignment="Right" Padding="8,2"
                                 Background="{Binding Status.IsCalibrated, Converter={StaticResource GoodSoftBrush}}">
                             <TextBlock Style="{StaticResource Pill.Text}" FontSize="10.5"
-                                       Text="{Binding Status.IsCalibrated, Converter={StaticResource OnText}}"/>
+                                       Text="{Binding Status.PointerHandName, StringFormat=Pointer · {0}}"/>
                         </Border>
                     </Grid>
                     <TextBlock Style="{StaticResource Text.BodyDim}" Margin="0,10,0,0"
-                               Text="Five points with the right hand - centre, left, right, top, bottom. Each needs two steady holds with a brief relax-and-return between them. If the holds differ by more than 4 cm, that point is retried instead of silently accepted. Cursor control pauses while capturing; use the mouse to cancel."/>
+                               Text="Five points with the current pointer hand - centre, left, right, top, bottom. Each needs two steady holds with a brief relax-and-return between them. If the holds differ by more than 4 cm, that point is retried instead of silently accepted. Swap to the hand you want first; cursor control pauses while capturing."/>
 
                     <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                         <Button x:Name="CalibrateButton" Style="{StaticResource Button.Primary}" Command="{Binding CalibrateCommand}" MinWidth="150">
@@ -156,7 +156,7 @@
                             </StackPanel>
                         </Button>
                         <CheckBox x:Name="CalibratedRangeCheck" Style="{StaticResource Toggle}" Content="Calibrated range" Margin="18,0,0,0"
-                                  IsChecked="{Binding Engine.UseCalibratedRange, Mode=TwoWay}"/>
+                                  IsChecked="{Binding Engine.CurrentPointerCalibrationEnabled, Mode=TwoWay}"/>
                     </StackPanel>
 
                     <!-- Live capture progress -->
@@ -252,13 +252,24 @@
             <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource Card}">
                 <StackPanel>
                     <TextBlock Text="RANGE &amp; MAPPING VALUES" Style="{StaticResource Text.Eyebrow}" Margin="0,0,0,6"/>
-                    <local:TuningSlider Label="Hand range X" Unit="m" HelpKey="Hand range X (m)" Minimum="0.15" Maximum="1.2" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.HandRangeX}"/>
-                    <local:TuningSlider Label="Hand range Y" Unit="m" HelpKey="Hand range Y (m)" Minimum="0.1" Maximum="0.9" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.HandRangeY}"/>
-                    <local:TuningSlider Label="Hand centre X" Unit="m" HelpKey="Hand centre X (m)" Minimum="-0.4" Maximum="0.4" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.HandCenterX}"/>
-                    <local:TuningSlider Label="Pointer height" Unit="m" HelpKey="Pointer height (m)" Minimum="0.2" Maximum="0.9" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.PointerCenterHeight}"/>
+                    <TextBlock Text="RIGHT HAND" Style="{StaticResource Text.EyebrowAccent}" Margin="0,6,0,2"/>
+                    <local:TuningSlider Label="Right range X" Unit="m" HelpKey="Hand range X (m)" Minimum="0.15" Maximum="1.2" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.HandRangeX}"/>
+                    <local:TuningSlider Label="Right range Y" Unit="m" HelpKey="Hand range Y (m)" Minimum="0.1" Maximum="0.9" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.HandRangeY}"/>
+                    <local:TuningSlider Label="Right centre X" Unit="m" HelpKey="Hand centre X (m)" Minimum="-0.4" Maximum="0.4" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.HandCenterX}"/>
+                    <local:TuningSlider Label="Right pointer height" Unit="m" HelpKey="Pointer height (m)" Minimum="0.2" Maximum="0.9" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.PointerCenterHeight}"/>
+                    <Border Style="{StaticResource Divider}"/>
+                    <Grid Margin="0,4,0,2">
+                        <TextBlock Text="LEFT HAND" Style="{StaticResource Text.EyebrowAccent}"/>
+                        <TextBlock Text="{Binding Engine.LeftHandCalibrated, Converter={StaticResource OnText}}"
+                                   Style="{StaticResource Text.Caption}" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <local:TuningSlider Label="Left range X" Unit="m" HelpKey="Hand range X (m)" Minimum="0.15" Maximum="1.2" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.LeftHandRangeX}"/>
+                    <local:TuningSlider Label="Left range Y" Unit="m" HelpKey="Hand range Y (m)" Minimum="0.1" Maximum="0.9" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.LeftHandRangeY}"/>
+                    <local:TuningSlider Label="Left centre X" Unit="m" HelpKey="Hand centre X (m)" Minimum="-0.4" Maximum="0.4" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.LeftHandCenterX}"/>
+                    <local:TuningSlider Label="Left pointer height" Unit="m" HelpKey="Pointer height (m)" Minimum="0.2" Maximum="0.9" SmallChange="0.01" LargeChange="0.05" Value="{Binding Engine.LeftPointerCenterHeight}"/>
                     <Border Style="{StaticResource Divider}"/>
                     <local:TuningSlider Label="Movement scale" Unit="&#215;" Minimum="0.1" Maximum="6" SmallChange="0.05" LargeChange="0.5" Value="{Binding Engine.MoveScale}"
-                                        IsEnabled="{Binding Engine.UseCalibratedRange, Converter={StaticResource InvBool}}"/>
+                                        IsEnabled="{Binding Engine.CurrentPointerCalibrationEnabled, Converter={StaticResource InvBool}}"/>
                     <TextBlock Style="{StaticResource Text.Caption}"
                                Text="Movement scale only applies to the uniform mapping; while Calibrated range is on, the rectangle alone defines reach and the slider is disabled here."/>
                 </StackPanel>

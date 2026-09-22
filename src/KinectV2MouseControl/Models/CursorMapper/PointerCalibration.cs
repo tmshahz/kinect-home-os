@@ -205,7 +205,7 @@ namespace KinectV2MouseControl
 
                 if (!hasAnchor)
                 {
-                    return instruction + "  - raise the right hand into the control zone";
+                    return instruction + "  - raise the pointer hand into the control zone";
                 }
 
                 if (isWrongSide)
@@ -224,15 +224,15 @@ namespace KinectV2MouseControl
             switch (Step)
             {
                 case CalibrationStep.Center:
-                    return "1/5 CENTRE: point RIGHT hand comfortably at the middle of the desktop";
+                    return "1/5 CENTRE: point the POINTER hand comfortably at the middle of the desktop";
                 case CalibrationStep.Left:
-                    return "2/5 LEFT: hold RIGHT hand at your comfortable LEFT limit";
+                    return "2/5 LEFT: hold the POINTER hand at your comfortable LEFT limit";
                 case CalibrationStep.Right:
-                    return "3/5 RIGHT: hold RIGHT hand at your comfortable RIGHT limit";
+                    return "3/5 RIGHT: hold the POINTER hand at your comfortable RIGHT limit";
                 case CalibrationStep.Top:
-                    return "4/5 TOP: hold RIGHT hand at your comfortable TOP limit";
+                    return "4/5 TOP: hold the POINTER hand at your comfortable TOP limit";
                 case CalibrationStep.Bottom:
-                    return "5/5 BOTTOM: hold RIGHT hand at your comfortable BOTTOM limit (still raised)";
+                    return "5/5 BOTTOM: hold the POINTER hand at your comfortable BOTTOM limit (still raised)";
                 default:
                     return "";
             }

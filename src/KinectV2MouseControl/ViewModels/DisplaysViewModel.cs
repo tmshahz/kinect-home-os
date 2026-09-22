@@ -62,6 +62,13 @@ namespace KinectV2MouseControl
                 case "HandRangeX":
                 case "HandRangeY":
                 case "HandCenterX":
+                case "LeftHandCalibrated":
+                case "LeftHandRangeX":
+                case "LeftHandRangeY":
+                case "LeftHandCenterX":
+                case "LeftPointerCenterHeight":
+                case "PointerHandName":
+                case "IsPointerHandCalibrated":
                 case "PointerCenterHeight":
                 case "ActivationMinHeight":
                 case "ForwardActivationDistance":
@@ -249,18 +256,25 @@ namespace KinectV2MouseControl
             ReachText = width.ToString("0.00") + " m wide × " + height.ToString("0.00") + " m tall, centred "
                 + reach.Center.X.ToString("0.00") + " m right of the spine and " + reach.Center.Y.ToString("0.00") + " m above the hips";
 
-            if (engine.UseCalibratedRange)
+            if (engine.IsPointerHandCalibrated)
             {
-                MappingModeText = "Calibrated range";
-                MappingSummary = "Independent horizontal and vertical scaling. The captured hand rectangle ("
-                    + engine.HandRangeX.ToString("0.00") + " × " + engine.HandRangeY.ToString("0.00")
+                bool isLeft = engine.PointerHandName == "Left";
+                double rangeX = isLeft ? engine.LeftHandRangeX : engine.HandRangeX;
+                double rangeY = isLeft ? engine.LeftHandRangeY : engine.HandRangeY;
+                MappingModeText = engine.PointerHandName + " pointer · calibrated";
+                MappingSummary = "Independent horizontal and vertical scaling. The "
+                    + engine.PointerHandName.ToLowerInvariant() + "-hand rectangle ("
+                    + rangeX.ToString("0.00") + " × " + rangeY.ToString("0.00")
                     + " m) maps onto the whole desktop; Movement scale is ignored.";
             }
             else
             {
-                MappingModeText = "Uniform mapping";
+                MappingModeText = engine.PointerHandName + " pointer · uniform mapping";
                 MappingSummary = "The original mapping: one scale for both axes, aligned to the desktop's longer side, multiplied by Movement scale ("
-                    + engine.MoveScale.ToString("0.00") + "). On a wide desktop this makes the vertical reach small - calibrate to fix that.";
+                    + engine.MoveScale.ToString("0.00") + "). "
+                    + (engine.PointerHandName == "Left" && !engine.LeftHandCalibrated
+                        ? "The left hand has no captured geometry yet; choose Calibrate Left."
+                        : "On a wide desktop this makes the vertical reach small - calibrate to fix that.");
             }
         }
 
@@ -280,7 +294,7 @@ namespace KinectV2MouseControl
             }
             else
             {
-                CursorText = "Cursor target appears here while the right hand is pointing";
+                CursorText = "Cursor target appears here while the pointer hand is active";
             }
 
             ShowRightHand = s.RightHandTracked;

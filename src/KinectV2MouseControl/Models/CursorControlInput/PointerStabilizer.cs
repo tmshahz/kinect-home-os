@@ -5,17 +5,17 @@ namespace KinectV2MouseControl
     public enum PointerSessionState
     {
         /// <summary>
-        /// Right hand not in the activation zone. The cursor belongs to the physical mouse.
+        /// Pointer hand not in the activation zone. The cursor belongs to the physical mouse.
         /// </summary>
         Waiting,
 
         /// <summary>
-        /// Right hand is in the zone; collecting good samples before taking the cursor.
+        /// Pointer hand is in the zone; collecting good samples before taking the cursor.
         /// </summary>
         Stabilizing,
 
         /// <summary>
-        /// Pointer session live: the right hand normally drives the cursor. KinectCursor may
+        /// Pointer session live: the latched pointer hand drives the cursor. KinectCursor may
         /// briefly hold its last target before tearing this session down at the release boundary.
         /// </summary>
         Active

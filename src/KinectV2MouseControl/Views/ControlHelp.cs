@@ -74,11 +74,11 @@ namespace KinectV2MouseControl
     public static class ControlHelp
     {
         public const string Overview =
-            "RIGHT hand = pointer. Raise it forward into the control zone; after a short settle the cursor follows it. " +
-            "Close the right fist to press/drag, make a Lasso (two fingers) to right click.\n" +
-            "LEFT hand = secondary gestures only, and only while its fist is CLOSED (the clutch). " +
+            "One latched hand owns the pointer (RIGHT at startup). Lower it for 0.5 s while the other hand is fully tracked and raised to swap roles; both hands up never flips. " +
+            "Close the pointer fist to press/drag, or make a Lasso (two fingers) to right click.\n" +
+            "The other hand owns secondary gestures, and only while its fist is CLOSED (the clutch). " +
             "Closed fist held still, then moved up/down = scroll. Closed fist swept quickly sideways = switch window. " +
-            "An open left hand does nothing.\n" +
+            "An open secondary hand does nothing.\n" +
             "Double clap = turn Kinect control off / on (tracking keeps running while off).\n" +
             "Lasso, scroll and swipe work in 'Grip to press' mode. Hover over any tuning control for its explanation, or click its ? to pin it in the help drawer.";
 
@@ -130,7 +130,7 @@ namespace KinectV2MouseControl
                 "the cursor slips as the fist closes, clicking beside the target."),
 
             new HelpEntry("Pointer settle (s)",
-                "When the right hand enters the zone (at startup and after any tracking loss), how long it must be tracked cleanly before it takes the cursor.",
+                "When the latched pointer hand enters the zone (at startup, after a role swap or tracking loss), how long it must be tracked cleanly before it takes the cursor.",
                 "more reliable, cleaner starts; the cursor takes over a little later.",
                 "the cursor takes over sooner.",
                 "noticeable wait before the cursor responds after raising the hand.",
@@ -158,21 +158,21 @@ namespace KinectV2MouseControl
                 "shimmer unlocks the cursor and it drifts again."),
 
             new HelpEntry("Hand range X (m)",
-                "Calibrated range: width of the hand region that maps to the full desktop width. Set automatically by Calibrate.",
+                "Calibrated range for the named hand: width of its region that maps to the full desktop width. Set automatically by calibrating that pointer hand.",
                 "more arm movement per desktop width, more precise.",
                 "less arm movement, more sensitive.",
                 "desktop edges need an uncomfortable stretch.",
                 "horizontal aiming is twitchy."),
 
             new HelpEntry("Hand range Y (m)",
-                "Calibrated range: height of the hand region that maps to the full desktop height.",
+                "Calibrated range for the named hand: height of its region that maps to the full desktop height.",
                 "more arm movement top-to-bottom, more precise.",
                 "less arm movement, more sensitive.",
                 "top/bottom edges need an uncomfortable stretch.",
                 "vertical aiming is twitchy."),
 
             new HelpEntry("Hand centre X (m)",
-                "Calibrated range: sideways position of the hand region. Positive moves it to your right.",
+                "Calibrated range for the named hand: sideways position of its region. Positive moves it to your right.",
                 "the region shifts right (hand further right for the same cursor spot).",
                 "the region shifts left.",
                 "the left edge is easy but the right edge is out of reach.",
@@ -200,7 +200,7 @@ namespace KinectV2MouseControl
                 "casual hand movement near the body engages control."),
 
             new HelpEntry("Scroll speed",
-                "Scroll rate for the clutched left fist, at 10 cm past the dead zone (notches/s per metre).",
+                "Scroll rate for the clutched secondary fist, at 10 cm past the dead zone (notches/s per metre).",
                 "faster scrolling for the same hand offset.",
                 "slower, more controllable scrolling.",
                 "pages fly past; hard to stop where you want.",
@@ -214,11 +214,11 @@ namespace KinectV2MouseControl
                 "(1.0 is the lowest useful value) small offsets scroll as fast as linear."),
 
             new HelpEntry("Swipe distance (m)",
-                "How far the clutched left fist must sweep sideways (quickly) to switch window.",
+                "How far the clutched secondary fist must sweep sideways (quickly) to switch window.",
                 "fewer accidental window switches.",
                 "switching needs a smaller sweep.",
                 "swipes are often not recognized.",
-                "normal repositioning with a closed left fist switches windows."),
+                "normal repositioning with a closed secondary fist switches windows."),
 
             new HelpEntry("Hover-to-click range",
                 "Hover to click mode only: how far (px) the cursor may move while the hover timer runs.",
@@ -239,15 +239,15 @@ namespace KinectV2MouseControl
                 null, null, null, null),
 
             new HelpEntry("Calibrated range",
-                "On: the hand region set by Calibrate (or the Hand range / centre sliders) maps onto the whole desktop, with separate horizontal and vertical scaling. Movement scale is ignored. Off: the original uniform mapping with Movement scale. Untick to revert instantly.",
+                "On: each hand with captured geometry uses its own range and centre with separate horizontal and vertical scaling; Movement scale is ignored. A hand not yet calibrated falls back to the original mapping. Off: both hands use the original uniform mapping with Movement scale.",
                 null, null, null, null),
 
             new HelpEntry("Invert scroll",
-                "Off: raising the clutched left fist scrolls up. On: raising it scrolls down.",
+                "Off: raising the clutched secondary fist scrolls up. On: raising it scrolls down.",
                 null, null, null, null),
 
             new HelpEntry("Calibrate",
-                "Guided 5-point capture with the RIGHT hand: centre, left, right, top, bottom. Each point needs two steady holds separated by relaxing away from it. Samples furthest from the hold median are discarded, and holds over 4 cm apart retry that point. Kinect control is paused while capturing; the button cancels. A 5% edge assist reaches screen edges just before full stretch.",
+                "Guided 5-point capture for whichever hand currently owns the pointer: centre, left, right, top, bottom. Each point needs two steady holds separated by relaxing away from it. Samples furthest from the hold median are discarded, and holds over 4 cm apart retry that point. Kinect control is paused while capturing; the button cancels. A 5% edge assist reaches screen edges just before full stretch.",
                 null, null, null, null),
 
             new HelpEntry("Profiles",

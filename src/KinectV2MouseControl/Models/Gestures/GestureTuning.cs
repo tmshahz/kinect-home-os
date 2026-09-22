@@ -38,11 +38,18 @@ namespace KinectV2MouseControl
         public double ActivationReleaseMargin { get; set; } = 0.12;
 
         /// <summary>
-        /// Seconds an active pointer session remains alive after the right hand leaves the
+        /// Seconds an active pointer session remains alive after the pointer hand leaves the
         /// activation zone. The cursor target is held and all grips are released during this
         /// window, so a brief boundary crossing does not force a new stabilization and snap.
         /// </summary>
         public double PointerReleaseGrace { get; set; } = 0.35;
+
+        /// <summary>
+        /// Seconds the current pointer hand must remain outside its activation zone before an
+        /// activated, fully tracked opposite hand may take the role. This clock overlaps the
+        /// shorter release grace. Higher makes swaps more deliberate; lower changes sooner.
+        /// </summary>
+        public double HandSwapDwell { get; set; } = 0.50;
 
         // ---- Guided calibration -----------------------------------------------------------
 
@@ -127,13 +134,13 @@ namespace KinectV2MouseControl
         // ---- Secondary clutch (left fist) ---------------------------------------------------
 
         /// <summary>
-        /// Seconds a confident Closed left hand must hold before the clutch engages. Short, so
+        /// Seconds a confident Closed secondary hand must hold before the clutch engages. Short, so
         /// the clutch feels immediate, but long enough to ignore a single stray Closed frame.
         /// </summary>
         public double ClutchEngageDuration { get; set; } = 0.10;
 
         /// <summary>
-        /// Seconds an Open left hand must hold before the clutch releases. Slightly longer than
+        /// Seconds an Open secondary hand must hold before the clutch releases. Slightly longer than
         /// engaging, so a flicker while the fist moves does not drop a scroll mid-gesture.
         /// </summary>
         public double ClutchReleaseDuration { get; set; } = 0.15;
@@ -148,7 +155,7 @@ namespace KinectV2MouseControl
         // ---- Scroll -----------------------------------------------------------------------
 
         /// <summary>
-        /// How long the clutched left hand must be held steady before scroll neutral is
+        /// How long the clutched secondary hand must be held steady before scroll neutral is
         /// captured. Stops a fist that closes mid-movement from capturing a neutral it has
         /// already left behind.
         /// </summary>
@@ -281,7 +288,7 @@ namespace KinectV2MouseControl
         // ---- Pointer session stabilization --------------------------------------------------
 
         /// <summary>
-        /// Seconds of consistently good right-hand samples required before a pointer session
+        /// Seconds of consistently good pointer-hand samples required before a pointer session
         /// starts driving the cursor. Applies on startup and on every reacquisition.
         /// </summary>
         public double PointerSettleTime { get; set; } = 0.25;
